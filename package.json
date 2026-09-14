@@ -1,0 +1,63 @@
+{
+  "name": "matrix-workouts-mcp",
+  "version": "0.1.0",
+  "description": "An MCP server for Matrix / Johnson Fitness workout history — power, cadence, resistance and heart rate the dashboard never shows.",
+  "license": "MIT",
+  "author": "Christoph Halang",
+  "type": "module",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "matrix-fitness",
+    "johnson-fitness",
+    "jfit",
+    "workout",
+    "cycling",
+    "fitness"
+  ],
+  "bin": {
+    "matrix-workouts-mcp": "dist/src/cli.js"
+  },
+  "main": "dist/src/server.js",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bestimmaa/matrix-workouts-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bestimmaa/matrix-workouts-mcp/issues"
+  },
+  "homepage": "https://github.com/bestimmaa/matrix-workouts-mcp#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/src/cli.js",
+    "prepare": "npm run build",
+    "start": "node dist/src/cli.js",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "release": "node scripts/release.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.13.0",
+    "matrix-workouts-core": "^0.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
