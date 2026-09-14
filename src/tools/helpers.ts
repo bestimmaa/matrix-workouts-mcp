@@ -9,12 +9,43 @@ import {
   findWorkout,
   flagHeartRateDropouts,
   workoutExport,
+  type ControlSignature,
   type Sample,
   type Workout,
 } from "matrix-workouts-core";
 
+import { num } from "../format.js";
+
 export class ToolError extends Error {
   override name = "ToolError";
+}
+
+/** Program modes that name the controlled channel outright. */
+const CONTROL_TARGET: Record<string, string> = {
+  target_heart_rate: "heart rate",
+  target_watts: "watts",
+};
+
+/**
+ * The control row: the answer first, then the evidence behind it.
+ *
+ * `controlSignature` classifies from telemetry alone and says so — closed-loop
+ * heart-rate stepping is not separable from a rider working the resistance dial, so
+ * it returns "unclassified" and exposes its metrics instead. Rendering only the
+ * verdict turned that invitation into a dead end: 22 target-heart-rate rides all read
+ * `unclassified`, on the one mode whose *name* answers the question. Two things fix
+ * it, both here rather than in the classifier, whose telemetry-only contract is
+ * deliberate: `mode` comes off the record and names the target when it can, and the
+ * numbers go out alongside the verdict so a model can weigh single-step nudging
+ * (mean step ~1) against real blocks itself.
+ */
+export function describeControl(mode: string, control: ControlSignature): string {
+  const evidence =
+    `${control.levels} levels ${control.minLevel}-${control.maxLevel}, ` +
+    `mean step ${num(control.meanStep)}, ${num(control.changeRate, 0)} changes/100 samples`;
+  const target = CONTROL_TARGET[mode];
+  const prefix = target ? `${target} (program target); series ` : "";
+  return `${prefix}${control.mode} — ${evidence}`;
 }
 
 /**

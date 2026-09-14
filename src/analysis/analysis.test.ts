@@ -21,6 +21,22 @@ describe("ride summary", () => {
     expect(s.reportedHeartRateBpm).not.toBeNull();
   });
 
+  /*
+   * The verdict is the least of what the classifier returns. It declines to name a
+   * closed-loop heart-rate program because single-step nudging does not separate one
+   * from a rider working the dial, and exposes its metrics instead so a caller can
+   * decide. Carrying only `.mode` threw those away and left every such ride reading
+   * "unclassified" with nothing behind it.
+   */
+  it("carries the whole control signature, not just its verdict", () => {
+    const s = rideSummary(fixtureWorkout("6aa194a08d2b6d09c61e9500"));
+    expect(s.control.mode).toBe("unclassified");
+    expect(s.control.levels).toBeGreaterThan(0);
+    expect(s.control.maxLevel).toBeGreaterThan(s.control.minLevel);
+    expect(s.control.meanStep).toBeGreaterThan(0);
+    expect(s.control.changeRate).toBeGreaterThan(0);
+  });
+
   it("integrates work over each sample's own gap, not an assumed ten seconds", () => {
     const samples = [
       { elapsedSeconds: 0, powerWatts: 100 },

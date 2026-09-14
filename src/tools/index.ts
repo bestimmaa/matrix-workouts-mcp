@@ -8,17 +8,40 @@
  */
 import { z } from "zod";
 
-import { bucketHistory, filterWorkouts } from "../analysis/history.js";
+import { type HistoryFilter, bucketHistory, filterWorkouts } from "../analysis/history.js";
 import { DEFAULT_WINDOWS_SECONDS, powerCurve } from "../analysis/powerCurve.js";
 import { rideSummary } from "../analysis/summary.js";
 import { csv, day, hms, km, num, table, timestamp } from "../format.js";
 import type { HistoryStore } from "../history/store.js";
-import { exportWorkoutTo, findOrThrow, sampleRows } from "./helpers.js";
+import { describeControl, exportWorkoutTo, findOrThrow, sampleRows } from "./helpers.js";
 
 const dateFilter = {
   from: z.string().optional().describe("Inclusive start date, YYYY-MM-DD."),
   to: z.string().optional().describe("Inclusive end date, YYYY-MM-DD."),
 };
+
+/**
+ * Every key `filterWorkouts` understands, in one shape both filtering tools spread.
+ *
+ * `summarize_history` used to declare only the dates while handing its whole argument
+ * object to the filter, so a `mode` a caller asked for was stripped by the schema
+ * before the handler ran and whole-history totals came back formatted exactly like
+ * filtered ones. The `satisfies` is what stops that recurring: a key in `HistoryFilter`
+ * and not here, or here and not there, is now a compile error rather than a wrong
+ * answer nobody can see.
+ */
+const rideFilter = {
+  ...dateFilter,
+  machineType: z.string().optional().describe("e.g. upright_bike, recumbent_bike."),
+  mode: z.string().optional().describe("Program mode, e.g. sprint_8, target_heart_rate."),
+} satisfies { [K in keyof Required<HistoryFilter>]: z.ZodType<HistoryFilter[K]> };
+
+const rideFilterSchema = z.object(rideFilter);
+
+/** Parse, never cast: the `args as never` this replaces is what hid the mismatch. */
+function rideFilterOf(args: Record<string, unknown>): HistoryFilter {
+  return rideFilterSchema.parse(args);
+}
 
 export interface ToolDefinition {
   name: string;
@@ -44,14 +67,12 @@ export const TOOLS: ToolDefinition[] = [
     description:
       "List recorded rides, newest first, one compact row each: date, program mode, duration, distance, average power and heart rate. Use this first to find the id of a ride before asking for its detail. Returns no sample series.",
     schema: {
-      ...dateFilter,
-      machineType: z.string().optional().describe("e.g. upright_bike, recumbent_bike."),
-      mode: z.string().optional().describe("Program mode, e.g. sprint_8, target_heart_rate."),
+      ...rideFilter,
       limit: z.number().int().positive().max(500).optional().describe("Default 20."),
     },
     handler: async (store, args) => {
       const { workouts } = await store.snapshotNow();
-      const matched = filterWorkouts(workouts, args as never);
+      const matched = filterWorkouts(workouts, rideFilterOf(args));
       const limit = (args.limit as number | undefined) ?? 20;
       const rows = matched.slice(0, limit).map((workout) => {
         const s = rideSummary(workout);
@@ -77,7 +98,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "get_workout",
     description:
-      "Everything derived about one ride: duration, distance, work done, average and peak power, cadence, resistance, both heart-rate averages, and what the console was actually holding constant. Does not return the sample series — use get_samples for that.",
+      "Everything derived about one ride: duration, distance, work done, average and peak power, cadence, resistance, both heart-rate averages, and what the console was actually holding constant — with the resistance metrics behind that call, because the series alone does not always settle it. Does not return the sample series — use get_samples for that.",
     schema: { id: z.string().describe("Workout id, from list_workouts. Either id form works.") },
     handler: async (store, args) => {
       const { workouts } = await store.snapshotNow();
@@ -86,7 +107,7 @@ export const TOOLS: ToolDefinition[] = [
       const rows: [string, string][] = [
         ["date", `${timestamp(s.startedAt)}Z`],
         ["mode", `${s.mode} (${s.machineType})`],
-        ["control", s.control],
+        ["control", describeControl(s.mode, s.control)],
         ["duration", hms(s.durationSeconds)],
         ["distance", `${km(s.distanceMeters)} km`],
         ["work", `${num(s.workKilojoules, 0)} kJ`],
@@ -136,9 +157,9 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "summarize_history",
     description:
-      "Training volume per week or month — rides, time, distance, work, average power and heart rate — plus the all-time power curve over the matched rides. This is the tool for questions about trends, totals and bests.",
+      "Training volume per week or month — rides, time, distance, work, average power and heart rate — plus the all-time power curve over the matched rides. Takes the same date, machine and mode filters as list_workouts, and both the totals and the curve are computed over what matched, so filter by mode to keep a Sprint 8's spikes out of a steady-state summary. This is the tool for questions about trends, totals and bests.",
     schema: {
-      ...dateFilter,
+      ...rideFilter,
       bucket: z.enum(["week", "month"]).optional().describe("Default month."),
       windowsSeconds: z
         .array(z.number().int().positive())
@@ -147,7 +168,7 @@ export const TOOLS: ToolDefinition[] = [
     },
     handler: async (store, args) => {
       const { workouts } = await store.snapshotNow();
-      const matched = filterWorkouts(workouts, args as never);
+      const matched = filterWorkouts(workouts, rideFilterOf(args));
       const bucket = (args.bucket as "week" | "month" | undefined) ?? "month";
 
       const totals = bucketHistory(matched, bucket).map((b) => [
@@ -191,7 +212,9 @@ export const TOOLS: ToolDefinition[] = [
       const rows: string[][] = [
         ["date", ...chosen.map((s) => day(s.startedAt))],
         ["mode", ...chosen.map((s) => s.mode)],
-        ["control", ...chosen.map((s) => s.control)],
+        // The verdict only: eight columns of metrics would push every other row off the
+        // right of the table, and the row above already names each ride's program mode.
+        ["control", ...chosen.map((s) => s.control.mode)],
         ["duration", ...chosen.map((s) => hms(s.durationSeconds))],
         ["km", ...chosen.map((s) => km(s.distanceMeters))],
         ["kJ", ...chosen.map((s) => num(s.workKilojoules, 0))],
