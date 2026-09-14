@@ -8,7 +8,13 @@
  * *better* one, because it averaged in real time ahead of the dropouts the series
  * preserves. Showing only ours would be quietly misleading, so both go out, labelled.
  */
-import { controlSignature, heartRateStats, type Sample, type Workout } from "matrix-workouts-core";
+import {
+  controlSignature,
+  heartRateStats,
+  type ControlSignature,
+  type Sample,
+  type Workout,
+} from "matrix-workouts-core";
 
 export interface RideSummary {
   id: string;
@@ -31,8 +37,14 @@ export interface RideSummary {
   /** Theirs: what the console reported. See the note above. */
   reportedHeartRateBpm: number | null;
   heartRateDropouts: number;
-  /** What the console was actually holding constant, derived from the series. */
-  control: string;
+  /**
+   * What the console was holding constant, derived from the series — verdict *and*
+   * metrics. The classifier names only the two modes the telemetry genuinely isolates
+   * and exposes its raw numbers otherwise, precisely so a caller can decide with more
+   * context than the series alone; keeping `.mode` alone threw that evidence away and
+   * left `get_workout` printing a bare "unclassified" on every heart-rate ride.
+   */
+  control: ControlSignature;
   sampleCount: number;
 }
 
@@ -63,7 +75,7 @@ export function rideSummary(workout: Workout): RideSummary {
     filteredHeartRateBpm: hr.meanBpm,
     reportedHeartRateBpm: workout.reported.averageHeartRateBpm,
     heartRateDropouts: hr.dropoutCount,
-    control: controlSignature(workout.samples).mode,
+    control: controlSignature(workout.samples),
     sampleCount: workout.samples.length,
   };
 }

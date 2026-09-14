@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 
 import { HistoryStore } from "../history/store.js";
 import { fixtureWorkout, fixtureWorkouts } from "../testSupport.js";
@@ -35,8 +36,17 @@ const tool = (name: string) => {
   return found;
 };
 
-const run = (name: string, args: Record<string, unknown> = {}, store = storeWith()) =>
-  tool(name).handler(store, args);
+/*
+ * Args go through the tool's own schema first, because that is what the MCP SDK does
+ * before a handler ever runs — it parses the declared shape, which silently drops
+ * anything the shape does not name. Calling a handler with a raw object tests a path
+ * no client can reach, and hides exactly the bug below: a filter the handler applied
+ * faithfully to a parameter the schema had already thrown away.
+ */
+const run = (name: string, args: Record<string, unknown> = {}, store = storeWith()) => {
+  const found = tool(name);
+  return found.handler(store, z.object(found.schema).parse(args));
+};
 
 describe("list_workouts", () => {
   it("lists every ride with its power and sample count", async () => {
@@ -70,6 +80,18 @@ describe("get_workout", () => {
     expect(text).toContain("power avg / max");
     expect(text).toContain("cadence avg");
     expect(text).toContain("resistance avg");
+  });
+
+  /*
+   * The target-heart-rate ride is the case the row used to fail on: the classifier
+   * returns "unclassified" by design, so printing the verdict alone carried no
+   * information at all — on the one mode whose name answers the question. Both halves
+   * are asserted, because either alone is the old bug wearing different clothes.
+   */
+  it("gives the control evidence and the program's own target, not a bare verdict", async () => {
+    const text = await run("get_workout", { id: "6aa194a08d2b6d09c61e9500" });
+    expect(text).toMatch(/control\s+heart rate \(program target\); series unclassified/);
+    expect(text).toContain("9 levels 1-9, mean step 1.0, 31 changes/100 samples");
   });
 
   it("names the ride that does not exist rather than failing vaguely", async () => {
@@ -119,6 +141,18 @@ describe("summarize_history", () => {
   it("accepts week buckets", async () => {
     expect(await run("summarize_history", { bucket: "week" })).toContain("Volume by week");
   });
+
+  /*
+   * The count, not the numbers: a summary that ignores the mode it was given is wrong
+   * in the one way a reader cannot spot, because whole-history totals are formatted
+   * exactly like filtered ones. Fewer rides than unfiltered is the cheapest assertion
+   * that the parameter survived the schema and reached `filterWorkouts` — and the
+   * power curve is built from the same matched set, so it is covered too.
+   */
+  it("narrows to the requested mode instead of summarizing the whole account", async () => {
+    expect(await run("summarize_history")).toContain("3 ride(s) matched");
+    expect(await run("summarize_history", { mode: "sprint_8" })).toContain("1 ride(s) matched");
+  });
 });
 
 describe("compare_workouts", () => {
@@ -127,6 +161,16 @@ describe("compare_workouts", () => {
     const text = await run("compare_workouts", { ids });
     expect(text).toContain("avg W");
     for (const id of ids) expect(text).toContain(id.slice(-6));
+  });
+
+  /* A column per ride, so the control row stays the verdict; the metrics belong to
+   * get_workout, where there is one ride and a whole line to spend on it. */
+  it("keeps the control column to the verdict", async () => {
+    const text = await run("compare_workouts", {
+      ids: ["6a95b033c23a154beb856bce", "6aa194a08d2b6d09c61e9500"],
+    });
+    expect(text).toMatch(/control\s+interval_blocks\s+unclassified/);
+    expect(text).not.toContain("changes/100 samples");
   });
 });
 
