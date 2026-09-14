@@ -1,11 +1,41 @@
 version: 2
+
+# Dependabot's default is one PR per dependency. On a fresh repo that meant six PRs
+# inside a minute and a red badge from the two that did not build. Two rules make it
+# useful instead of loud:
+#
+#   - **Majors are never opened.** A major is a decision, and it should land with a
+#     changelog entry and someone watching the build — not as a PR that fails while
+#     nobody is looking. On day one here, TypeScript 5->7 and vite-node 2->6 both broke
+#     the build, and zod 3->4 would have broken the MCP SDK that pins zod 3.
+#   - **Everything else arrives grouped**, so a quiet week is one PR rather than five.
+#
+# matrix-workouts-core is covered by the same rule on purpose: its majors come out of
+# this project and land by hand as part of its own release, never as a bot's surprise.
 updates:
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      production:
+        dependency-type: production
+        update-types: ["minor", "patch"]
+      development:
+        dependency-type: development
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Action majors are a different animal — few, cheap to verify, and the runner images
+  # move out from under old versions whether or not anyone is paying attention. They
+  # come through, grouped and monthly.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
