@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
-    "matrix-workouts-core": "^0.1.0",
+    "matrix-workouts-core": "^0.2.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
