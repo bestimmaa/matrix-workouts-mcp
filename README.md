@@ -56,10 +56,10 @@ against it. No passcode in a config file, no sign-in from the server at all.
 |---|---|---|
 | `MATRIX_XID` | — | Member number from the gym tag. Without it the server is read-only over the cache. |
 | `MATRIX_PIN` | — | Numeric passcode. Used for one sign-in request, never stored or logged. |
-| `MATRIX_CACHE_DIR` | `~/.cache/matrix-workouts-mcp` | Where the downloaded history is kept, written `0600`. |
+| `MATRIX_CACHE_DIR` | `$XDG_CACHE_HOME/matrix-workouts-mcp`, else `~/.cache/matrix-workouts-mcp` | Where the downloaded history is kept, written `0600`. |
 | `MATRIX_CACHE_TTL_MINUTES` | `60` | How long a cached history is served before a refetch. |
 | `MCP_TRANSPORT` | `stdio` | Set to `http` to serve over HTTP instead. |
-| `MATRIX_HTTP_PORT` | `3000` | HTTP transport only. |
+| `MATRIX_HTTP_PORT` | `3000` | HTTP transport only. Falls back to `PORT` when unset. |
 | `MATRIX_HTTP_HOST` | `127.0.0.1` | HTTP transport only. Loopback on purpose — see Privacy. |
 | `MATRIX_MCP_TOKEN` | — | Bearer token. **Required** for the HTTP transport; the server refuses to start without it. |
 

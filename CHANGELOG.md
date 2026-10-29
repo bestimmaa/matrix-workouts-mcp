@@ -14,6 +14,18 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
   mixed every program together. Both filtering tools now spread one `rideFilter`
   shape, checked against `HistoryFilter` at compile time, and parse their arguments
   instead of casting them.
+- A server running credential-free kept serving the history it read at startup after
+  `matrix-workouts-history` rewrote the cache file; it now re-reads the file once its
+  modification time moves past the snapshot in memory.
+- One refresh that failed synchronously — the cache directory could not be created,
+  say — left its rejected promise in place, so every later `refresh_history` and
+  stale-cache refetch failed the same way until the process restarted.
+- Every tool asked the store for the history a second time to write its footer. On a
+  stale-cache fallback that retried the failing download once more per call, and the
+  footer could describe a different history from the rows above it.
+- The server introduced itself to MCP clients as version 0.1.0 whatever was
+  installed; it now reads the version from package.json.
+- Durations that were not a whole number of seconds could print as `1:60`.
 
 ### Changed
 
