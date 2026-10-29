@@ -7,7 +7,7 @@
  * with a single sample's instantaneous reading dressed up as an average, which is why
  * the windows below start at 10 and every one of them is a multiple of it.
  */
-import type { Sample, Workout } from "matrix-workouts-core";
+import { SAMPLE_INTERVAL_SECONDS, type Sample, type Workout } from "matrix-workouts-core";
 
 export const DEFAULT_WINDOWS_SECONDS = [10, 30, 60, 300, 600, 1200, 3600] as const;
 
@@ -30,7 +30,7 @@ export interface PowerCurvePoint {
  * samples rather than five and a guess.
  */
 function bestWindow(samples: readonly Sample[], windowSeconds: number): { watts: number; atSeconds: number } | null {
-  const width = Math.floor(windowSeconds / 10);
+  const width = Math.floor(windowSeconds / SAMPLE_INTERVAL_SECONDS);
   if (width < 1 || samples.length < width) return null;
 
   let sum = 0;

@@ -4,36 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { HistoryStore } from "../history/store.js";
-import { fixtureWorkout, fixtureWorkouts } from "../testSupport.js";
+import { fixtureWorkout, fixtureWorkouts, storeWith } from "../testSupport.js";
 import { TOOLS } from "./index.js";
-
-/**
- * A store that never touches the network: the snapshot is handed in.
- *
- * The tools are the part of this server a model actually sees, so they are tested
- * against real records rather than a mock of the parser. What is being asserted is
- * not that the numbers are pretty but that they are *there* — the whole reason this
- * project exists is three channels the platform's own UI omits, and a tool that
- * quietly dropped one would look perfectly fine in a conversation.
- */
-function storeWith(cacheDir = mkdtempSync(join(tmpdir(), "mw-mcp-")), onRead = (): void => {}): HistoryStore {
-  const store = new HistoryStore({ cacheDir, ttlMs: 60_000 });
-  const snapshot = {
-    workouts: fixtureWorkouts(),
-    fetchedAt: new Date("2026-09-14T08:00:00Z"),
-    truncated: false,
-    skipped: 0,
-    source: "cache" as const,
-  };
-  Object.defineProperty(store, "snapshotNow", {
-    value: async () => {
-      onRead();
-      return snapshot;
-    },
-  });
-  return store;
-}
 
 const tool = (name: string) => {
   const found = TOOLS.find((t) => t.name === name);
@@ -91,19 +63,26 @@ describe("list_workouts", () => {
 });
 
 describe("get_workout", () => {
-  it("reports both heart-rate averages and explains why they differ", async () => {
+  /*
+   * The dropout-heavy ride, where the two sides genuinely disagree at the top: the
+   * console saw 165 bpm, the filtered 10-second series tops out at 159. Showing only
+   * the mean hid both numbers, and an agent wanting the peak had to export the ride
+   * and parse it by hand.
+   */
+  it("reports heart rate's mean, min and max both ways, and explains why they differ", async () => {
     const text = await run("get_workout", { id: "6aa194a08d2b6d09c61e9500" });
-    expect(text).toContain("heart rate (reported)");
-    expect(text).toContain("heart rate (filtered)");
-    expect(text).toMatch(/hr dropouts\s+\d+/);
-    expect(text).toContain("the console averaged in real time");
+    expect(text).toMatch(/heart rate avg \(reported \/ filtered\)\s+142 \/ 140\.9 bpm/);
+    expect(text).toMatch(/heart rate min \(reported \/ filtered\)\s+87 \/ 90 bpm/);
+    expect(text).toMatch(/heart rate max \(reported \/ filtered\)\s+165 \/ 159 bpm/);
+    expect(text).toMatch(/hr samples valid \/ dropouts\s+234 \/ 80/);
+    expect(text).toContain("the console read the strap in real time");
   });
 
-  it("carries the three channels the stock dashboard omits", async () => {
-    const text = await run("get_workout", { id: "6a998daf8d2b6d09c6e334d2" });
-    expect(text).toContain("power avg / max");
-    expect(text).toContain("cadence avg");
-    expect(text).toContain("resistance avg");
+  it("carries the three channels the stock dashboard omits, average and peak", async () => {
+    const text = await run("get_workout", { id: "6a95b033c23a154beb856bce" });
+    expect(text).toMatch(/power avg \/ max\s+\d+ \/ \d+ W/);
+    expect(text).toMatch(/cadence avg \/ max\s+\d+ \/ 150 rpm/);
+    expect(text).toMatch(/resistance avg \/ max\s+[\d.]+ \/ 23/);
   });
 
   /*
@@ -131,15 +110,54 @@ describe("get_samples", () => {
     expect(rows[0]?.split(",")).toHaveLength(5);
   });
 
-  it("caps rows and says so, instead of flooding the conversation", async () => {
-    const text = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", maxRows: 10 });
-    expect(text).toContain("10 of 362 rows");
+  const dataRows = (text: string) => text.split("\n").filter((line) => /^\d/.test(line));
+
+  /*
+   * The bug was truncation from the front: a default call on a 362-sample ride came
+   * back as its first 200 rows, a well-formed CSV of the first two thirds of the ride
+   * with nothing but a trailing note to say so. The last row is the assertion that
+   * matters — the answer has to reach the end of the ride.
+   */
+  it("downsamples a ride too long for maxRows rather than cutting it short", async () => {
+    const text = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2" });
+    const rows = dataRows(text);
+    expect(rows.length).toBeLessThanOrEqual(200);
+    expect(Number(rows.at(-1)?.split(",")[0])).toBeGreaterThan(3500);
+    expect(text).toContain("one row per 20 s instead of 10 s, 181 rows across the 362 samples");
+  });
+
+  it("raises the stride to the smallest that fits, and says nothing when none is needed", async () => {
+    const tight = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", maxRows: 10 });
+    expect(dataRows(tight)).toHaveLength(10);
+    const roomy = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", maxRows: 1000 });
+    expect(dataRows(roomy)).toHaveLength(362);
+    expect(roomy).not.toContain("Downsampled");
+  });
+
+  it("keeps an explicit window, downsampling only within it", async () => {
+    const text = await run("get_samples", {
+      id: "6a998daf8d2b6d09c6e334d2",
+      fromSeconds: 600,
+      toSeconds: 1190,
+      maxRows: 30,
+    });
+    const seconds = dataRows(text).map((row) => Number(row.split(",")[0]));
+    expect(seconds[0]).toBe(600);
+    expect(seconds.at(-1)).toBeGreaterThanOrEqual(1160);
+    expect(seconds.every((s) => s >= 600 && s <= 1190)).toBe(true);
+  });
+
+  it("takes the stride as a resolution in seconds", async () => {
+    const text = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", resolutionSeconds: 60 });
+    expect(dataRows(text)).toHaveLength(61);
+    await expect(
+      run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", everyNth: 6, resolutionSeconds: 60 }),
+    ).rejects.toThrow(/not both/);
   });
 
   it("strides, so a whole ride fits in a readable number of rows", async () => {
     const text = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", everyNth: 6 });
-    const rows = text.split("\n").filter((line) => /^\d/.test(line));
-    expect(rows.length).toBe(61);
+    expect(dataRows(text)).toHaveLength(61);
   });
 
   it("blanks a dropout rather than emitting the console's zero", async () => {

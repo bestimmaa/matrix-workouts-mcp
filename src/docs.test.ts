@@ -57,6 +57,23 @@ describe("README documents the server's surface", () => {
   });
 
   /*
+   * A model reads a tool's name and description first; whether it sees the schema
+   * before its first call depends on the client. An argument named only in the schema
+   * is one a model guesses at — `workout_id` for `id`, observed — so every argument,
+   * not just the required ones, must appear in backticks in its own tool's
+   * description: an optional one guessed wrong is the worse case, since the schema
+   * drops it and the tool answers with its default.
+   */
+  it("names every argument in its own tool's description", () => {
+    const unnamed = TOOLS.flatMap((tool) =>
+      Object.keys(tool.schema)
+        .filter((key) => !tool.description.includes(`\`${key}\``))
+        .map((key) => `${tool.name}.${key}`),
+    );
+    expect(unnamed).toEqual([]);
+  });
+
+  /*
    * Not a style check: the quickstart is the only part of this file most readers run,
    * and a README that names a binary nobody can invoke wastes their afternoon. Assert
    * the pieces, not the exact line, so `npx -y` and `claude mcp add` can be written

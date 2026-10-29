@@ -26,9 +26,36 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
 - The server introduced itself to MCP clients as version 0.1.0 whatever was
   installed; it now reads the version from package.json.
 - Durations that were not a whole number of seconds could print as `1:60`.
+- `get_samples` cut a window too long for `maxRows` short instead of covering it, so
+  a default call on a 47-minute ride returned its first 33 minutes as a well-formed
+  CSV with only a trailing note to say so. It now raises the stride to the smallest
+  that fits and says it did; a part of a ride is what `fromSeconds`/`toSeconds` are for.
 
 ### Changed
 
+- **Unknown tool arguments are now an error.** An argument a tool does not take used
+  to be stripped by the SDK before the handler ran, so `summarize_history` with
+  `groupBy` for `bucket` answered with whole-history monthly totals shaped exactly
+  like a correct call. Each tool is now registered with a strict schema, and the
+  call fails with `Unknown argument 'groupBy'; summarize_history takes: from, to,
+  machineType, mode, bucket, windowsSeconds.` A caller that relied on extra keys
+  being ignored will now get that error instead.
+- `@modelcontextprotocol/sdk` floor raised from `^1.13.0` to `^1.22.0`, the first
+  release whose `registerTool` keeps an assembled schema as given; earlier ones wrap
+  it in `z.object()` again, which breaks every call.
+- Every tool description names its own arguments, so a model reading the tool
+  listing knows `get_workout` takes `id` before its first call rather than after a
+  rejected guess. Clients do not all surface the schema before a call; the
+  description is the part every client shows.
+- `get_workout` reports heart rate's minimum and maximum next to its mean, each both
+  as the console reported it and as the filtered series gives it, plus the count of
+  valid samples beside the dropouts; and peak cadence and resistance next to their
+  averages. `compare_workouts` gains the same peaks. Both sets of figures were already
+  computed — the record carries its own min and max, `heartRateStats` returns the
+  series' — and were dropped on the way to the caller.
+- `get_samples` accepts `resolutionSeconds` as an alternative to `everyNth`: 60 is
+  one row per minute, without the caller having to know the sample interval. It must
+  be a multiple of 10, the sample interval, rather than being rounded to one.
 - `get_workout` renders the control signature's metrics alongside its verdict, and
   names the controlled channel when the program mode already states it. The
   classifier returns "unclassified" for closed-loop heart-rate rides by design,
