@@ -27,10 +27,10 @@ export const num = (value: number | null | undefined, digits = 1): string =>
 
 export const km = (meters: number): string => (meters / 1000).toFixed(2);
 
+/** Rounded before splitting, so 119.6 s reads 2:00 rather than 1:60. */
 export const hms = (seconds: number): string => {
-  const m = Math.floor(seconds / 60);
-  const s = Math.round(seconds % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
+  const whole = Math.round(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 };
 
 export const day = (date: Date): string => date.toISOString().slice(0, 10);
