@@ -91,19 +91,26 @@ describe("list_workouts", () => {
 });
 
 describe("get_workout", () => {
-  it("reports both heart-rate averages and explains why they differ", async () => {
+  /*
+   * The dropout-heavy ride, where the two sides genuinely disagree at the top: the
+   * console saw 165 bpm, the filtered 10-second series tops out at 159. Showing only
+   * the mean hid both numbers, and an agent wanting the peak had to export the ride
+   * and parse it by hand.
+   */
+  it("reports heart rate's mean, min and max both ways, and explains why they differ", async () => {
     const text = await run("get_workout", { id: "6aa194a08d2b6d09c61e9500" });
-    expect(text).toContain("heart rate (reported)");
-    expect(text).toContain("heart rate (filtered)");
-    expect(text).toMatch(/hr dropouts\s+\d+/);
-    expect(text).toContain("the console averaged in real time");
+    expect(text).toMatch(/heart rate avg \(reported \/ filtered\)\s+142 \/ 140\.9 bpm/);
+    expect(text).toMatch(/heart rate min \(reported \/ filtered\)\s+87 \/ 90 bpm/);
+    expect(text).toMatch(/heart rate max \(reported \/ filtered\)\s+165 \/ 159 bpm/);
+    expect(text).toMatch(/hr samples valid \/ dropouts\s+234 \/ 80/);
+    expect(text).toContain("the console read the strap in real time");
   });
 
-  it("carries the three channels the stock dashboard omits", async () => {
-    const text = await run("get_workout", { id: "6a998daf8d2b6d09c6e334d2" });
-    expect(text).toContain("power avg / max");
-    expect(text).toContain("cadence avg");
-    expect(text).toContain("resistance avg");
+  it("carries the three channels the stock dashboard omits, average and peak", async () => {
+    const text = await run("get_workout", { id: "6a95b033c23a154beb856bce" });
+    expect(text).toMatch(/power avg \/ max\s+\d+ \/ \d+ W/);
+    expect(text).toMatch(/cadence avg \/ max\s+\d+ \/ 150 rpm/);
+    expect(text).toMatch(/resistance avg \/ max\s+[\d.]+ \/ 23/);
   });
 
   /*

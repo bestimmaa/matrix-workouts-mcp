@@ -30,12 +30,25 @@ export interface RideSummary {
   /** Mechanical work over the ride, kJ — power integrated across sample duration. */
   workKilojoules: number | null;
   averageCadenceRpm: number | null;
+  maxCadenceRpm: number | null;
   /** Mean resistance level, which is machine- and program-dependent. */
   averageResistance: number | null;
+  maxResistance: number | null;
   /** Ours: mean of the samples that survive dropout filtering. */
   filteredHeartRateBpm: number | null;
   /** Theirs: what the console reported. See the note above. */
   reportedHeartRateBpm: number | null;
+  /**
+   * The extremes, both ways, for the same reason as the means — and more so: one
+   * glitching sample can move a maximum in a way it cannot move a mean, so the two
+   * agreeing is corroboration and the two far apart is a warning.
+   */
+  filteredMinHeartRateBpm: number | null;
+  filteredMaxHeartRateBpm: number | null;
+  reportedMinHeartRateBpm: number | null;
+  reportedMaxHeartRateBpm: number | null;
+  /** Samples accepted as real readings, and those rejected as dropouts. */
+  heartRateValidSamples: number;
   heartRateDropouts: number;
   /**
    * What the console was holding constant, derived from the series — verdict *and*
@@ -55,8 +68,13 @@ export const mean = (values: readonly number[]): number | null =>
 const channel = (samples: readonly Sample[], pick: (s: Sample) => number): number[] =>
   samples.map(pick).filter((value) => Number.isFinite(value) && value > 0);
 
+const max = (values: readonly number[]): number | null =>
+  values.length === 0 ? null : Math.max(...values);
+
 export function rideSummary(workout: Workout): RideSummary {
   const power = channel(workout.samples, (s) => s.powerWatts);
+  const cadence = channel(workout.samples, (s) => s.cadenceRpm);
+  const resistance = channel(workout.samples, (s) => s.resistanceLevel);
   const hr = heartRateStats(workout.samples);
 
   return {
@@ -68,12 +86,19 @@ export function rideSummary(workout: Workout): RideSummary {
     distanceMeters: workout.distanceMeters,
     calories: workout.calories,
     averagePowerWatts: mean(power),
-    maxPowerWatts: power.length > 0 ? Math.max(...power) : null,
+    maxPowerWatts: max(power),
     workKilojoules: workKilojoules(workout.samples),
-    averageCadenceRpm: mean(channel(workout.samples, (s) => s.cadenceRpm)),
-    averageResistance: mean(channel(workout.samples, (s) => s.resistanceLevel)),
+    averageCadenceRpm: mean(cadence),
+    maxCadenceRpm: max(cadence),
+    averageResistance: mean(resistance),
+    maxResistance: max(resistance),
     filteredHeartRateBpm: hr.meanBpm,
     reportedHeartRateBpm: workout.reported.averageHeartRateBpm,
+    filteredMinHeartRateBpm: hr.minBpm,
+    filteredMaxHeartRateBpm: hr.maxBpm,
+    reportedMinHeartRateBpm: workout.reported.minHeartRateBpm,
+    reportedMaxHeartRateBpm: workout.reported.maxHeartRateBpm,
+    heartRateValidSamples: hr.validCount,
     heartRateDropouts: hr.dropoutCount,
     control: controlSignature(workout.samples),
     sampleCount: workout.samples.length,

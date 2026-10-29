@@ -121,7 +121,7 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "get_workout",
     description:
-      "Everything derived about one ride: duration, distance, work done, average and peak power, cadence, resistance, both heart-rate averages, and what the console was actually holding constant — with the resistance metrics behind that call, because the series alone does not always settle it. Does not return the sample series — use get_samples for that.",
+      "Everything derived about one ride: duration, distance, work done, average and peak power, cadence and resistance, heart rate's average, minimum and maximum both as the console reported them and as the filtered series gives them, and what the console was actually holding constant — with the resistance metrics behind that call, because the series alone does not always settle it. Does not return the sample series — use get_samples for that.",
     schema: { id: z.string().describe("Workout id, from list_workouts. Either id form works.") },
     handler: async (store, args) => {
       const snapshot = await store.snapshotNow();
@@ -134,19 +134,29 @@ export const TOOLS: ToolDefinition[] = [
         ["distance", `${km(s.distanceMeters)} km`],
         ["work", `${num(s.workKilojoules, 0)} kJ`],
         ["calories", num(s.calories, 0)],
-        ["power avg / max", `${num(s.averagePowerWatts, 0)} W / ${num(s.maxPowerWatts, 0)} W`],
-        ["cadence avg", `${num(s.averageCadenceRpm, 0)} rpm`],
-        ["resistance avg", num(s.averageResistance)],
-        ["heart rate (reported)", `${num(s.reportedHeartRateBpm, 0)} bpm`],
-        ["heart rate (filtered)", `${num(s.filteredHeartRateBpm, 0)} bpm`],
-        ["hr dropouts", String(s.heartRateDropouts)],
+        ["power avg / max", `${num(s.averagePowerWatts, 0)} / ${num(s.maxPowerWatts, 0)} W`],
+        ["cadence avg / max", `${num(s.averageCadenceRpm, 0)} / ${num(s.maxCadenceRpm, 0)} rpm`],
+        ["resistance avg / max", `${num(s.averageResistance)} / ${num(s.maxResistance, 0)}`],
+        [
+          "heart rate avg (reported / filtered)",
+          `${num(s.reportedHeartRateBpm, 0)} / ${num(s.filteredHeartRateBpm)} bpm`,
+        ],
+        [
+          "heart rate min (reported / filtered)",
+          `${num(s.reportedMinHeartRateBpm, 0)} / ${num(s.filteredMinHeartRateBpm, 0)} bpm`,
+        ],
+        [
+          "heart rate max (reported / filtered)",
+          `${num(s.reportedMaxHeartRateBpm, 0)} / ${num(s.filteredMaxHeartRateBpm, 0)} bpm`,
+        ],
+        ["hr samples valid / dropouts", `${s.heartRateValidSamples} / ${s.heartRateDropouts}`],
         ["samples", String(s.sampleCount)],
       ];
       const note =
         s.heartRateDropouts > 0
-          ? "\n\nThe two heart-rate averages differ because the console averaged in real time, " +
-            "ahead of the dropouts the interval series preserves. On a glitching strap the " +
-            "reported figure is usually the better one."
+          ? "\n\nThe reported and filtered heart-rate figures differ because the console read the " +
+            "strap in real time, ahead of the dropouts the interval series preserves. On a " +
+            "glitching strap the reported figure is usually the better one."
           : "";
       return table(["field", "value"], rows) + note + provenance(snapshot);
     },
@@ -249,9 +259,13 @@ export const TOOLS: ToolDefinition[] = [
         ["avg W", ...chosen.map((s) => num(s.averagePowerWatts, 0))],
         ["max W", ...chosen.map((s) => num(s.maxPowerWatts, 0))],
         ["avg rpm", ...chosen.map((s) => num(s.averageCadenceRpm, 0))],
+        ["max rpm", ...chosen.map((s) => num(s.maxCadenceRpm, 0))],
         ["avg resistance", ...chosen.map((s) => num(s.averageResistance))],
+        ["max resistance", ...chosen.map((s) => num(s.maxResistance, 0))],
         ["bpm (reported)", ...chosen.map((s) => num(s.reportedHeartRateBpm, 0))],
         ["bpm (filtered)", ...chosen.map((s) => num(s.filteredHeartRateBpm, 0))],
+        ["max bpm (reported)", ...chosen.map((s) => num(s.reportedMaxHeartRateBpm, 0))],
+        ["max bpm (filtered)", ...chosen.map((s) => num(s.filteredMaxHeartRateBpm, 0))],
       ];
       return (
         table(["", ...chosen.map((s) => s.id.slice(-6))], rows) +

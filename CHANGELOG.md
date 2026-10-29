@@ -33,6 +33,12 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
 
 ### Changed
 
+- `get_workout` reports heart rate's minimum and maximum next to its mean, each both
+  as the console reported it and as the filtered series gives it, plus the count of
+  valid samples beside the dropouts; and peak cadence and resistance next to their
+  averages. `compare_workouts` gains the same peaks. Both sets of figures were already
+  computed — the record carries its own min and max, `heartRateStats` returns the
+  series' — and were dropped on the way to the caller.
 - `get_samples` accepts `resolutionSeconds` as an alternative to `everyNth`: 60 is
   one row per minute, without the caller having to know the sample interval.
 - `get_workout` renders the control signature's metrics alongside its verdict, and
