@@ -1,13 +1,10 @@
 #!/usr/bin/env node
-"use strict";
-
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 
@@ -33,14 +30,16 @@ function ensureReleaseType(type) {
 }
 
 function ensureCleanWorktree() {
+  let clean;
   try {
+    // `git diff --quiet` exits non-zero on a change, which `run` throws on.
     run("git", ["diff", "--quiet"]);
     run("git", ["diff", "--cached", "--quiet"]);
-    const untrackedFiles = run("git", ["ls-files", "--others", "--exclude-standard"]).trim();
-    if (untrackedFiles !== "") {
-      throw new Error("Release requires a clean git worktree.");
-    }
+    clean = run("git", ["ls-files", "--others", "--exclude-standard"]).trim() === "";
   } catch {
+    clean = false;
+  }
+  if (!clean) {
     throw new Error("Release requires a clean git worktree.");
   }
 }
@@ -76,36 +75,25 @@ function getNextVersion(releaseType, currentVersion = pkg.version) {
   return `${major}.${minor}.${patch + 1}`;
 }
 
-function ensureAttachedHeadBranch() {
+function ensureMainBranch() {
   const branch = getCurrentBranch();
 
   if (!branch) {
     throw new Error("Release requires an attached HEAD branch.");
   }
 
-  return branch;
-}
-
-function ensureMainBranch(branch) {
   if (branch !== "main") {
     throw new Error("Release requires the main branch.");
   }
-
-  return branch;
 }
 
-function ensureChangelogExists() {
+function ensureChangelogEntry(version) {
   const changelogPath = path.resolve(process.cwd(), "CHANGELOG.md");
 
   if (!existsSync(changelogPath)) {
     throw new Error("Release requires CHANGELOG.md. Update it before running npm run release.");
   }
 
-  return changelogPath;
-}
-
-function ensureChangelogEntry(version) {
-  const changelogPath = ensureChangelogExists();
   const changelog = readFileSync(changelogPath, "utf8");
 
   if (!changelog.includes(`## [${version}]`)) {
@@ -122,12 +110,9 @@ function isExpectedGithubRemote(url) {
 function restoreReleaseFiles() {
   const restorableFiles = releaseFiles.filter((file) => existsSync(path.resolve(process.cwd(), file)));
 
-  if (restorableFiles.length === 0) {
-    return true;
+  if (restorableFiles.length > 0) {
+    run("git", ["restore", "--source=HEAD", "--staged", "--worktree", ...restorableFiles]);
   }
-
-  run("git", ["restore", "--source=HEAD", "--staged", "--worktree", ...restorableFiles]);
-  return true;
 }
 
 function rollbackRelease(version, options = {}) {
@@ -157,13 +142,12 @@ function rollbackRelease(version, options = {}) {
   return rollbackSucceeded;
 }
 
-function hasCreatedReleaseState(preReleaseHead, expectedTag) {
+function hasCreatedReleaseState(preReleaseHead) {
   try {
-    const currentHead = getHeadCommit();
-    return currentHead !== preReleaseHead;
-  } catch {}
-
-  return false;
+    return getHeadCommit() !== preReleaseHead;
+  } catch {
+    return false;
+  }
 }
 
 function packRelease() {
@@ -197,19 +181,17 @@ function main(argv = process.argv.slice(2)) {
   ensureCleanWorktree();
   const expectedVersion = getNextVersion(releaseType);
   ensureChangelogEntry(expectedVersion);
-  const branch = ensureMainBranch(ensureAttachedHeadBranch());
+  ensureMainBranch();
   const preReleaseHead = getHeadCommit();
   const expectedTag = `v${expectedVersion}`;
   const hadExpectedTagBeforeRelease = hasGitRef(expectedTag);
 
   run(npmCommand, ["test"], { stdio: "inherit" });
-  let versionStarted = false;
   let version;
   let packPath;
   let cleanupSucceeded = true;
 
   try {
-    versionStarted = true;
     version = run(npmCommand, ["version", releaseType, "-m", "chore(release): %s"]).trim();
     packPath = packRelease();
     cleanupSucceeded = cleanupPackArtifact(packPath);
@@ -218,25 +200,21 @@ function main(argv = process.argv.slice(2)) {
     }
   } catch (error) {
     cleanupSucceeded = cleanupPackArtifact(packPath) && cleanupSucceeded;
+    const reason = error.message || error;
 
-    if (versionStarted) {
-      const releaseStateCreated = hasCreatedReleaseState(preReleaseHead, expectedTag);
-      if (!releaseStateCreated) {
-        restoreReleaseFiles();
-        throw new Error(`Release failed before creating git release state: ${error.message || error}`);
-      }
-
-      const rollbackSucceeded = rollbackRelease(version || expectedTag, {
-        shouldDeleteTag: !hadExpectedTagBeforeRelease
-      });
-      if (rollbackSucceeded && cleanupSucceeded) {
-        throw new Error(`Release failed after version bump and was rolled back: ${error.message || error}`);
-      }
-
-      throw new Error(`Release failed after version bump and rollback was incomplete: ${error.message || error}`);
+    if (!hasCreatedReleaseState(preReleaseHead)) {
+      restoreReleaseFiles();
+      throw new Error(`Release failed before creating git release state: ${reason}`);
     }
 
-    throw error;
+    const rollbackSucceeded = rollbackRelease(version || expectedTag, {
+      shouldDeleteTag: !hadExpectedTagBeforeRelease
+    });
+    if (rollbackSucceeded && cleanupSucceeded) {
+      throw new Error(`Release failed after version bump and was rolled back: ${reason}`);
+    }
+
+    throw new Error(`Release failed after version bump and rollback was incomplete: ${reason}`);
   }
 
   console.log(`Release prepared: ${version}`);
