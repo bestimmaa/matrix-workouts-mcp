@@ -81,19 +81,28 @@ export class HistoryStore {
     return this.options.now?.() ?? new Date();
   }
 
-  private readCache(): HistorySnapshot | undefined {
+  /**
+   * The newer of the snapshot in memory and the cache file on disk.
+   *
+   * The file is re-parsed only when its mtime has moved past the snapshot in memory —
+   * which is what happens when `matrix-workouts-history` rewrites it under a running
+   * server. Without that check a credential-free server kept answering from the
+   * history it read at startup for as long as the process lived.
+   */
+  private latestCached(): HistorySnapshot | undefined {
     try {
-      const stat = statSync(this.cachePath);
+      const { mtime } = statSync(this.cachePath);
+      if (this.snapshot && mtime.getTime() <= this.snapshot.fetchedAt.getTime()) return this.snapshot;
       const parsed = readRawHistoryFile(this.cachePath);
       return {
         workouts: parsed.workouts,
-        fetchedAt: stat.mtime,
+        fetchedAt: mtime,
         truncated: parsed.truncated,
         skipped: parsed.skipped,
         source: "cache",
       };
     } catch {
-      return undefined;
+      return this.snapshot;
     }
   }
 
@@ -112,18 +121,12 @@ export class HistoryStore {
   async snapshotNow(): Promise<HistorySnapshot> {
     if (this.snapshot && this.fresh(this.snapshot)) return this.snapshot;
 
-    const cached = this.snapshot ?? this.readCache();
-    if (cached && this.fresh(cached)) {
+    const cached = this.latestCached();
+    if (cached && (this.fresh(cached) || !this.options.credentials)) {
       this.snapshot = cached;
       return cached;
     }
-
-    const credentials = this.options.credentials;
-    if (!credentials) {
-      if (cached) {
-        this.snapshot = cached;
-        return cached;
-      }
+    if (!this.options.credentials) {
       throw new HistoryUnavailableError(
         "No cached history and no credentials. Set MATRIX_XID and MATRIX_PIN, or point " +
           "MATRIX_CACHE_DIR at a directory holding a history downloaded by " +
@@ -134,12 +137,10 @@ export class HistoryStore {
     try {
       return await this.refresh();
     } catch (error) {
-      if (cached) {
-        // A stale answer that says it is stale beats no answer.
-        this.snapshot = cached;
-        return cached;
-      }
-      throw error;
+      if (!cached) throw error;
+      // A stale answer that says it is stale beats no answer.
+      this.snapshot = cached;
+      return cached;
     }
   }
 
@@ -153,18 +154,22 @@ export class HistoryStore {
       );
     }
 
-    this.inFlight ??= (async () => {
-      try {
-        mkdirSync(this.options.cacheDir, { recursive: true, mode: 0o700 });
-        const download = this.options.download ?? downloadReal;
-        const snapshot = await download(credentials, this.options.cacheDir);
-        this.snapshot = snapshot;
-        return snapshot;
-      } finally {
-        this.inFlight = undefined;
-      }
-    })();
+    /*
+     * `.finally` rather than a `finally` inside an async IIFE: a download that throws
+     * synchronously would run that block before `??=` assigned, leaving the rejected
+     * promise in `inFlight` and every later refresh replaying the same failure.
+     */
+    this.inFlight ??= this.download(credentials).finally(() => {
+      this.inFlight = undefined;
+    });
 
     return this.inFlight;
+  }
+
+  private async download(credentials: Credentials): Promise<HistorySnapshot> {
+    mkdirSync(this.options.cacheDir, { recursive: true, mode: 0o700 });
+    const download = this.options.download ?? downloadReal;
+    this.snapshot = await download(credentials, this.options.cacheDir);
+    return this.snapshot;
   }
 }
