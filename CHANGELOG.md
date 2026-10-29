@@ -34,6 +34,9 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
   classifier returns "unclassified" for closed-loop heart-rate rides by design,
   exposing its raw numbers so a caller can decide; printing the verdict alone threw
   that evidence away and left the row carrying nothing.
+- `matrix-workouts-core` moves from `^0.1.0` to `^0.4.0`. Below 1.0 a caret range
+  stops at the minor version, so `^0.1.0` never let npm install 0.2 or later. 0.2–0.4
+  only added exports; nothing this server uses was removed or renamed.
 
 ## [0.1.0] - 2026-09-14
 
