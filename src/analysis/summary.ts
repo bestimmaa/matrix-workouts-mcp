@@ -48,7 +48,7 @@ export interface RideSummary {
   sampleCount: number;
 }
 
-const mean = (values: readonly number[]): number | null =>
+export const mean = (values: readonly number[]): number | null =>
   values.length === 0 ? null : values.reduce((a, b) => a + b, 0) / values.length;
 
 /** Samples with a usable reading for one channel. Zero is absence, not a measurement. */
