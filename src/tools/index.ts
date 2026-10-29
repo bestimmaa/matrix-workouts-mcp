@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import { type HistoryFilter, bucketHistory, filterWorkouts } from "../analysis/history.js";
 import { DEFAULT_WINDOWS_SECONDS, powerCurve } from "../analysis/powerCurve.js";
-import { rideSummary } from "../analysis/summary.js";
+import { type Declined, type RideSummary, rideSummary } from "../analysis/summary.js";
 import { csv, day, hms, km, num, table, timestamp } from "../format.js";
 import type { HistorySnapshot, HistoryStore } from "../history/store.js";
 import {
@@ -83,6 +83,38 @@ function provenance(snapshot: HistorySnapshot): string {
   if (snapshot.truncated) parts.push("WARNING: the API's paging says there is more history than arrived");
   return `\n\n(${parts.join("; ")})`;
 }
+
+/**
+ * Each field of a ride summary, rendered by `get_workout` or declined — the view that
+ * claims to be "everything derived about one ride". See the completeness guards in
+ * `analysis/summary.ts`.
+ */
+const GET_WORKOUT_ROWS = {
+  id: "declined: the caller passed it in",
+  startedAt: "rendered",
+  mode: "rendered",
+  machineType: "rendered",
+  durationSeconds: "rendered",
+  distanceMeters: "rendered",
+  calories: "rendered",
+  averagePowerWatts: "rendered",
+  maxPowerWatts: "rendered",
+  workKilojoules: "rendered",
+  averageCadenceRpm: "rendered",
+  maxCadenceRpm: "rendered",
+  averageResistance: "rendered",
+  maxResistance: "rendered",
+  filteredHeartRateBpm: "rendered",
+  reportedHeartRateBpm: "rendered",
+  filteredMinHeartRateBpm: "rendered",
+  filteredMaxHeartRateBpm: "rendered",
+  reportedMinHeartRateBpm: "rendered",
+  reportedMaxHeartRateBpm: "rendered",
+  heartRateValidSamples: "rendered",
+  heartRateDropouts: "rendered",
+  control: "rendered",
+  sampleCount: "rendered",
+} satisfies Record<keyof RideSummary, "rendered" | Declined>;
 
 export const TOOLS: ToolDefinition[] = [
   defineTool({

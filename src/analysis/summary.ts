@@ -12,6 +12,7 @@ import {
   controlSignature,
   heartRateStats,
   type ControlSignature,
+  type HeartRateStats,
   type Sample,
   type Workout,
 } from "matrix-workouts-core";
@@ -60,6 +61,35 @@ export interface RideSummary {
   control: ControlSignature;
   sampleCount: number;
 }
+
+/*
+ * Completeness guards. The bug this server keeps meeting is a lower layer computing
+ * something and an upper layer silently declining to pass it on: the control metrics
+ * reduced to a bare verdict, heart rate's min and max computed and thrown away. Core's
+ * types are interfaces, erased at runtime, so the check has to be compile-time — each
+ * field of what a layer receives is mapped to where it goes or declined with a reason,
+ * and a field core adds becomes a type error here at the next version bump. Declining
+ * is a legitimate choice; writing the reason down is what makes it one.
+ */
+
+/** Written in place of a destination: the field is deliberately not passed on. */
+export type Declined = `declined: ${string}`;
+
+/** Where each `heartRateStats` field lands in the summary. */
+const HEART_RATE_STATS = {
+  minBpm: "filteredMinHeartRateBpm",
+  maxBpm: "filteredMaxHeartRateBpm",
+  meanBpm: "filteredHeartRateBpm",
+  validCount: "heartRateValidSamples",
+  dropoutCount: "heartRateDropouts",
+} satisfies Record<keyof HeartRateStats, keyof RideSummary | Declined>;
+
+/** Where each of the record's own heart-rate figures lands in the summary. */
+const REPORTED_HEART_RATE = {
+  minHeartRateBpm: "reportedMinHeartRateBpm",
+  maxHeartRateBpm: "reportedMaxHeartRateBpm",
+  averageHeartRateBpm: "reportedHeartRateBpm",
+} satisfies Record<keyof Workout["reported"], keyof RideSummary | Declined>;
 
 export const mean = (values: readonly number[]): number | null =>
   values.length === 0 ? null : values.reduce((a, b) => a + b, 0) / values.length;

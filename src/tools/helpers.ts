@@ -14,6 +14,7 @@ import {
   type Workout,
 } from "matrix-workouts-core";
 
+import type { Declined } from "../analysis/summary.js";
 import { num } from "../format.js";
 
 export class ToolError extends Error {
@@ -39,6 +40,20 @@ const CONTROL_TARGET: Record<string, string> = {
  * numbers go out alongside the verdict so a model can weigh single-step nudging
  * (mean step ~1) against real blocks itself.
  */
+/**
+ * Each field of the control signature, rendered by `describeControl` or declined.
+ * See the completeness guards in `analysis/summary.ts`.
+ */
+const CONTROL_SIGNATURE = {
+  mode: "rendered",
+  levels: "rendered",
+  minLevel: "rendered",
+  maxLevel: "rendered",
+  changes: "declined: changeRate is the same count per 100 samples, comparable across ride lengths",
+  changeRate: "rendered",
+  meanStep: "rendered",
+} satisfies Record<keyof ControlSignature, "rendered" | Declined>;
+
 export function describeControl(mode: string, control: ControlSignature): string {
   const evidence =
     `${control.levels} levels ${control.minLevel}-${control.maxLevel}, ` +

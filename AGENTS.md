@@ -135,7 +135,18 @@ test needs one.
 server actually registers and reads, in both directions. It is the same argument as
 the core repo's layering test: a convention nothing checks is a convention that
 drifts, and documentation drifts faster than code because nothing else fails when it
-does.
+does. It also asserts every tool argument is named, in backticks, in its own tool's
+description.
+
+**Completeness guards are compile-time, in `src/`.** Core's `HeartRateStats` and
+`ControlSignature` are interfaces, erased at runtime, so nothing a test walks can see
+their fields. Instead each layer that receives one maps every field to where it goes
+or declines it with a written reason, under `satisfies Record<keyof X, …>` — in
+`analysis/summary.ts` for the heart-rate figures, `tools/helpers.ts` for the control
+signature and `tools/index.ts` for what `get_workout` renders of a `RideSummary`. A
+field core adds is then a type error at the next bump rather than a number nobody
+sees. They live in `src/` and CI runs `npm run typecheck`; a guard in a test file
+would be checked by nothing.
 
 ---
 
