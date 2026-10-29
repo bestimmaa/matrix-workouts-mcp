@@ -88,7 +88,7 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "list_workouts",
     description:
-      "List recorded rides, newest first, one compact row each: date, program mode, duration, distance, average power and heart rate. Use this first to find the id of a ride before asking for its detail. Returns no sample series.",
+      "List recorded rides, newest first, one compact row each: date, program mode, duration, distance, average power and heart rate. Use this first to find the id of a ride before asking for its detail. Optional filters: `from` and `to` (dates), `machineType`, `mode`; `limit` caps the rows. Returns no sample series.",
     schema: {
       ...rideFilter,
       limit: z.number().int().positive().max(500).optional().describe("Default 20."),
@@ -121,7 +121,7 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "get_workout",
     description:
-      "Everything derived about one ride: duration, distance, work done, average and peak power, cadence and resistance, heart rate's average, minimum and maximum both as the console reported them and as the filtered series gives them, and what the console was actually holding constant — with the resistance metrics behind that call, because the series alone does not always settle it. Does not return the sample series — use get_samples for that.",
+      "Everything derived about one ride, by `id` (from list_workouts; either id form works): duration, distance, work done, average and peak power, cadence and resistance, heart rate's average, minimum and maximum both as the console reported them and as the filtered series gives them, and what the console was actually holding constant — with the resistance metrics behind that call, because the series alone does not always settle it. Does not return the sample series — use get_samples for that.",
     schema: { id: z.string().describe("Workout id, from list_workouts. Either id form works.") },
     handler: async (store, args) => {
       const snapshot = await store.snapshotNow();
@@ -164,9 +164,9 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "get_samples",
     description:
-      "The raw interval series for one ride as CSV — power, cadence, resistance, heart rate, speed, one row per 10 seconds. A full ride is several hundred rows, so a window or stride that would exceed the row limit is downsampled to fit, never cut short; the note under the CSV says when that happened.",
+      "The raw interval series for one ride as CSV — power, cadence, resistance, heart rate, speed, one row per 10 seconds. A full ride is several hundred rows, so a window or stride that would exceed the row limit is downsampled to fit, never cut short; the note under the CSV says when that happened. Takes the ride's `id`; optionally `fields`, a window (`fromSeconds`, `toSeconds`), a stride as `everyNth` or `resolutionSeconds`, and `maxRows`.",
     schema: {
-      id: z.string(),
+      id: z.string().describe("Workout id, from list_workouts. Either id form works."),
       fields: z
         .array(z.enum(FIELD_NAMES))
         .optional()
@@ -198,7 +198,7 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "summarize_history",
     description:
-      "Training volume per week or month — rides, time, distance, work, average power and heart rate — plus the all-time power curve over the matched rides. Takes the same date, machine and mode filters as list_workouts, and both the totals and the curve are computed over what matched, so filter by mode to keep a Sprint 8's spikes out of a steady-state summary. This is the tool for questions about trends, totals and bests.",
+      "Training volume per week or month — rides, time, distance, work, average power and heart rate — plus the all-time power curve over the matched rides. Takes the same date, machine and mode filters as list_workouts, and both the totals and the curve are computed over what matched, so filter by mode to keep a Sprint 8's spikes out of a steady-state summary. Arguments: `from`, `to`, `machineType`, `mode`, `bucket` (week or month) and `windowsSeconds` for the power curve, all optional. This is the tool for questions about trends, totals and bests.",
     schema: {
       ...rideFilter,
       bucket: z.enum(["week", "month"]).optional().describe("Default month."),
@@ -242,8 +242,8 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "compare_workouts",
     description:
-      "Two or more rides side by side on every derived number. Use it for 'how did today compare to last Tuesday' rather than calling get_workout repeatedly.",
-    schema: { ids: z.array(z.string()).min(2).max(8) },
+      "Two or more rides side by side on every derived number, given as `ids` (two to eight, from list_workouts). Use it for 'how did today compare to last Tuesday' rather than calling get_workout repeatedly.",
+    schema: { ids: z.array(z.string()).min(2).max(8).describe("Two to eight workout ids, from list_workouts.") },
     handler: async (store, args) => {
       const snapshot = await store.snapshotNow();
       const chosen = args.ids.map((id) => rideSummary(findOrThrow(snapshot.workouts, id)));
@@ -277,9 +277,9 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "export_workout",
     description:
-      "Write one ride to disk as a lossless JSON export document — normalized telemetry plus the upstream record verbatim. Returns the path, not the contents, because the document is far too large to read into a conversation.",
+      "Write one ride to disk as a lossless JSON export document — normalized telemetry plus the upstream record verbatim. Takes the ride's `id` and an optional `path`. Returns the path written, not the contents, because the document is far too large to read into a conversation.",
     schema: {
-      id: z.string(),
+      id: z.string().describe("Workout id, from list_workouts. Either id form works."),
       path: z.string().optional().describe("Directory or file path. Defaults to the cache directory."),
     },
     handler: async (store, args) => {
@@ -292,7 +292,7 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "refresh_history",
     description:
-      "Re-download the whole history from the API, replacing the cache. Needs credentials. Everything else answers from the cache, so call this only when a ride is missing because it happened since the last fetch.",
+      "Re-download the whole history from the API, replacing the cache. Takes no arguments. Needs credentials. Everything else answers from the cache, so call this only when a ride is missing because it happened since the last fetch.",
     schema: {},
     handler: async (store) => {
       const snapshot = await store.refresh();

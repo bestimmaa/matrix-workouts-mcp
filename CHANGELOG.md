@@ -33,6 +33,10 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
 
 ### Changed
 
+- Every tool description names its own arguments, so a model reading the tool
+  listing knows `get_workout` takes `id` before its first call rather than after a
+  rejected guess. Clients do not all surface the schema before a call; the
+  description is the part every client shows.
 - `get_workout` reports heart rate's minimum and maximum next to its mean, each both
   as the console reported it and as the filtered series gives it, plus the count of
   valid samples beside the dropouts; and peak cadence and resistance next to their
