@@ -14,6 +14,7 @@ import {
   type Workout,
 } from "matrix-workouts-core";
 
+import { SAMPLE_SECONDS } from "../analysis/powerCurve.js";
 import type { Declined } from "../analysis/summary.js";
 import { num } from "../format.js";
 
@@ -28,19 +29,6 @@ const CONTROL_TARGET: Record<string, string> = {
 };
 
 /**
- * The control row: the answer first, then the evidence behind it.
- *
- * `controlSignature` classifies from telemetry alone and says so — closed-loop
- * heart-rate stepping is not separable from a rider working the resistance dial, so
- * it returns "unclassified" and exposes its metrics instead. Rendering only the
- * verdict turned that invitation into a dead end: 22 target-heart-rate rides all read
- * `unclassified`, on the one mode whose *name* answers the question. Two things fix
- * it, both here rather than in the classifier, whose telemetry-only contract is
- * deliberate: `mode` comes off the record and names the target when it can, and the
- * numbers go out alongside the verdict so a model can weigh single-step nudging
- * (mean step ~1) against real blocks itself.
- */
-/**
  * Each field of the control signature, rendered by `describeControl` or declined.
  * See the completeness guards in `analysis/summary.ts`.
  */
@@ -54,6 +42,19 @@ const CONTROL_SIGNATURE = {
   meanStep: "rendered",
 } satisfies Record<keyof ControlSignature, "rendered" | Declined>;
 
+/**
+ * The control row: the answer first, then the evidence behind it.
+ *
+ * `controlSignature` classifies from telemetry alone and says so — closed-loop
+ * heart-rate stepping is not separable from a rider working the resistance dial, so
+ * it returns "unclassified" and exposes its metrics instead. Rendering only the
+ * verdict turned that invitation into a dead end: 22 target-heart-rate rides all read
+ * `unclassified`, on the one mode whose *name* answers the question. Two things fix
+ * it, both here rather than in the classifier, whose telemetry-only contract is
+ * deliberate: `mode` comes off the record and names the target when it can, and the
+ * numbers go out alongside the verdict so a model can weigh single-step nudging
+ * (mean step ~1) against real blocks itself.
+ */
 export function describeControl(mode: string, control: ControlSignature): string {
   const evidence =
     `${control.levels} levels ${control.minLevel}-${control.maxLevel}, ` +
@@ -91,9 +92,6 @@ const FIELDS: Record<FieldName, (s: Sample) => number> = {
 };
 
 const DEFAULT_FIELDS: readonly FieldName[] = ["power", "cadence", "resistance", "heartRate"];
-
-/** The console writes one sample every 10 seconds; see `analysis/powerCurve.ts`. */
-export const SAMPLE_SECONDS = 10;
 
 export interface SampleQuery {
   fields?: readonly FieldName[] | undefined;

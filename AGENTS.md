@@ -74,8 +74,9 @@ sample spends roughly three times what a CSV row does on punctuation and repeate
 keys, and buys a model nothing a header line does not.
 
 - **Aggregates by default, raw samples only when asked.** `get_workout` does not
-  return a series. `get_samples` takes a window, a stride and a row cap, and says so
-  when it truncates rather than silently cutting.
+  return a series. `get_samples` takes a window, a stride and a row cap, and a window
+  that would overrun the cap is downsampled to fit — never cut short, which returned
+  the start of a ride formatted like all of it — with a note saying so.
 - **A dropout is an empty cell, never the console's `0`.** A zero in a heart-rate
   column is a number a model will cheerfully average. Note the mask from
   `flagHeartRateDropouts` is *validity* — `true` means the reading is real. Reading it

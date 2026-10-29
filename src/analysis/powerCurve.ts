@@ -9,6 +9,9 @@
  */
 import type { Sample, Workout } from "matrix-workouts-core";
 
+/** The console's sample interval, and so the finest resolution anything here can claim. */
+export const SAMPLE_SECONDS = 10;
+
 export const DEFAULT_WINDOWS_SECONDS = [10, 30, 60, 300, 600, 1200, 3600] as const;
 
 export interface PowerCurvePoint {
@@ -30,7 +33,7 @@ export interface PowerCurvePoint {
  * samples rather than five and a guess.
  */
 function bestWindow(samples: readonly Sample[], windowSeconds: number): { watts: number; atSeconds: number } | null {
-  const width = Math.floor(windowSeconds / 10);
+  const width = Math.floor(windowSeconds / SAMPLE_SECONDS);
   if (width < 1 || samples.length < width) return null;
 
   let sum = 0;

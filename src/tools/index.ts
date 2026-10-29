@@ -9,18 +9,11 @@
 import { z } from "zod";
 
 import { type HistoryFilter, bucketHistory, filterWorkouts } from "../analysis/history.js";
-import { DEFAULT_WINDOWS_SECONDS, powerCurve } from "../analysis/powerCurve.js";
+import { DEFAULT_WINDOWS_SECONDS, SAMPLE_SECONDS, powerCurve } from "../analysis/powerCurve.js";
 import { type Declined, type RideSummary, rideSummary } from "../analysis/summary.js";
 import { csv, day, hms, km, num, table, timestamp } from "../format.js";
 import type { HistorySnapshot, HistoryStore } from "../history/store.js";
-import {
-  FIELD_NAMES,
-  SAMPLE_SECONDS,
-  describeControl,
-  exportWorkoutTo,
-  findOrThrow,
-  sampleRows,
-} from "./helpers.js";
+import { FIELD_NAMES, describeControl, exportWorkoutTo, findOrThrow, sampleRows } from "./helpers.js";
 
 const dateFilter = {
   from: z.string().optional().describe("Inclusive start date, YYYY-MM-DD."),
