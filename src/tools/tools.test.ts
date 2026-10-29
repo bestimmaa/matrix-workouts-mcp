@@ -17,7 +17,7 @@ import { TOOLS } from "./index.js";
  * project exists is three channels the platform's own UI omits, and a tool that
  * quietly dropped one would look perfectly fine in a conversation.
  */
-function storeWith(cacheDir = mkdtempSync(join(tmpdir(), "mw-mcp-"))): HistoryStore {
+function storeWith(cacheDir = mkdtempSync(join(tmpdir(), "mw-mcp-")), onRead = (): void => {}): HistoryStore {
   const store = new HistoryStore({ cacheDir, ttlMs: 60_000 });
   const snapshot = {
     workouts: fixtureWorkouts(),
@@ -26,7 +26,12 @@ function storeWith(cacheDir = mkdtempSync(join(tmpdir(), "mw-mcp-"))): HistorySt
     skipped: 0,
     source: "cache" as const,
   };
-  Object.defineProperty(store, "snapshotNow", { value: async () => snapshot });
+  Object.defineProperty(store, "snapshotNow", {
+    value: async () => {
+      onRead();
+      return snapshot;
+    },
+  });
   return store;
 }
 
@@ -47,6 +52,25 @@ const run = (name: string, args: Record<string, unknown> = {}, store = storeWith
   const found = tool(name);
   return found.handler(store, z.object(found.schema).parse(args));
 };
+
+/*
+ * One snapshot per answer. The footer used to ask the store again, which on a stale
+ * fallback retried the failing network a second time and could describe a different
+ * history from the one the rows came from.
+ */
+describe("provenance", () => {
+  it("reads the history once per call and footers the snapshot it answered from", async () => {
+    let calls = 0;
+    const store = storeWith(undefined, () => {
+      calls += 1;
+    });
+    for (const name of ["list_workouts", "summarize_history"]) {
+      calls = 0;
+      expect(await run(name, {}, store)).toContain("(3 rides, cache of 2026-09-14 08:00Z)");
+      expect(calls).toBe(1);
+    }
+  });
+});
 
 describe("list_workouts", () => {
   it("lists every ride with its power and sample count", async () => {

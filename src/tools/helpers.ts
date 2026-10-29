@@ -2,7 +2,7 @@
  * The parts of the tool handlers that are worth testing on their own.
  */
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   exportFilename,
@@ -61,25 +61,28 @@ export function findOrThrow(workouts: readonly Workout[], id: string): Workout {
   return workout;
 }
 
-const FIELDS = {
-  power: (s: Sample) => s.powerWatts,
-  cadence: (s: Sample) => s.cadenceRpm,
-  resistance: (s: Sample) => s.resistanceLevel,
-  heartRate: (s: Sample) => s.heartRateBpm,
-  speed: (s: Sample) => s.speedKmh,
-  distance: (s: Sample) => s.cumulativeDistanceMeters,
-} as const;
+/** The columns `get_samples` offers, in the order its schema lists them. */
+export const FIELD_NAMES = ["power", "cadence", "resistance", "heartRate", "speed", "distance"] as const;
 
-export type FieldName = keyof typeof FIELDS;
+export type FieldName = (typeof FIELD_NAMES)[number];
 
-const DEFAULT_FIELDS: FieldName[] = ["power", "cadence", "resistance", "heartRate"];
+const FIELDS: Record<FieldName, (s: Sample) => number> = {
+  power: (s) => s.powerWatts,
+  cadence: (s) => s.cadenceRpm,
+  resistance: (s) => s.resistanceLevel,
+  heartRate: (s) => s.heartRateBpm,
+  speed: (s) => s.speedKmh,
+  distance: (s) => s.cumulativeDistanceMeters,
+};
+
+const DEFAULT_FIELDS: readonly FieldName[] = ["power", "cadence", "resistance", "heartRate"];
 
 export interface SampleQuery {
-  fields?: unknown;
-  fromSeconds?: unknown;
-  toSeconds?: unknown;
-  everyNth?: unknown;
-  maxRows?: unknown;
+  fields?: readonly FieldName[] | undefined;
+  fromSeconds?: number | undefined;
+  toSeconds?: number | undefined;
+  everyNth?: number | undefined;
+  maxRows?: number | undefined;
 }
 
 /**
@@ -93,15 +96,11 @@ export function sampleRows(
   workout: Workout,
   query: SampleQuery,
 ): { headers: string[]; rows: (string | number)[][]; truncated: boolean; total: number } {
-  const fields = (Array.isArray(query.fields) && query.fields.length > 0
-    ? (query.fields as FieldName[])
-    : DEFAULT_FIELDS
-  ).filter((field): field is FieldName => field in FIELDS);
-
-  const from = typeof query.fromSeconds === "number" ? query.fromSeconds : 0;
-  const to = typeof query.toSeconds === "number" ? query.toSeconds : Number.POSITIVE_INFINITY;
-  const stride = typeof query.everyNth === "number" ? Math.max(1, Math.trunc(query.everyNth)) : 1;
-  const maxRows = typeof query.maxRows === "number" ? Math.max(1, Math.trunc(query.maxRows)) : 200;
+  const fields = query.fields?.length ? query.fields : DEFAULT_FIELDS;
+  const from = query.fromSeconds ?? 0;
+  const to = query.toSeconds ?? Number.POSITIVE_INFINITY;
+  const stride = Math.max(1, Math.trunc(query.everyNth ?? 1));
+  const maxRows = Math.max(1, Math.trunc(query.maxRows ?? 200));
 
   /*
    * The mask is *validity*, not dropouts — true means the reading is real. Reading it
@@ -152,7 +151,7 @@ export function exportWorkoutTo(workout: Workout, path: string | undefined, defa
     file = target.endsWith("/") ? join(target, exportFilename(workout)) : target;
   }
 
-  mkdirSync(join(file, ".."), { recursive: true, mode: 0o700 });
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
   writeFileSync(file, `${JSON.stringify(workoutExport(workout), null, 2)}\n`, { mode: 0o600 });
   return file;
 }
