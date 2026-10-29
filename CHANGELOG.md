@@ -54,7 +54,8 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
   computed — the record carries its own min and max, `heartRateStats` returns the
   series' — and were dropped on the way to the caller.
 - `get_samples` accepts `resolutionSeconds` as an alternative to `everyNth`: 60 is
-  one row per minute, without the caller having to know the sample interval.
+  one row per minute, without the caller having to know the sample interval. It must
+  be a multiple of 10, the sample interval, rather than being rounded to one.
 - `get_workout` renders the control signature's metrics alongside its verdict, and
   names the controlled channel when the program mode already states it. The
   classifier returns "unclassified" for closed-loop heart-rate rides by design,

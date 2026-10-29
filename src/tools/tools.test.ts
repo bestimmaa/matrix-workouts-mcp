@@ -123,7 +123,7 @@ describe("get_samples", () => {
     const rows = dataRows(text);
     expect(rows.length).toBeLessThanOrEqual(200);
     expect(Number(rows.at(-1)?.split(",")[0])).toBeGreaterThan(3500);
-    expect(text).toContain("one row per 20 s instead of 10 s, 181 rows covering all 362 samples");
+    expect(text).toContain("one row per 20 s instead of 10 s, 181 rows across the 362 samples");
   });
 
   it("raises the stride to the smallest that fits, and says nothing when none is needed", async () => {

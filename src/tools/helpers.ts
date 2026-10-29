@@ -5,6 +5,7 @@ import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import {
+  SAMPLE_INTERVAL_SECONDS,
   exportFilename,
   findWorkout,
   flagHeartRateDropouts,
@@ -14,7 +15,6 @@ import {
   type Workout,
 } from "matrix-workouts-core";
 
-import { SAMPLE_SECONDS } from "../analysis/powerCurve.js";
 import type { Declined } from "../analysis/summary.js";
 import { num } from "../format.js";
 
@@ -137,7 +137,7 @@ export function sampleRows(workout: Workout, query: SampleQuery): SampleTable {
   const requested = Math.max(
     1,
     query.resolutionSeconds !== undefined
-      ? Math.round(query.resolutionSeconds / SAMPLE_SECONDS)
+      ? Math.round(query.resolutionSeconds / SAMPLE_INTERVAL_SECONDS)
       : Math.trunc(query.everyNth ?? 1),
   );
   const maxRows = Math.max(1, Math.trunc(query.maxRows ?? 200));

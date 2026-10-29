@@ -6,10 +6,11 @@
  * and `docs.test.ts` asserts the README's table matches — so adding a tool is one
  * edit here and one row there, and forgetting the row fails the build.
  */
+import { SAMPLE_INTERVAL_SECONDS } from "matrix-workouts-core";
 import { z } from "zod";
 
 import { type HistoryFilter, bucketHistory, filterWorkouts } from "../analysis/history.js";
-import { DEFAULT_WINDOWS_SECONDS, SAMPLE_SECONDS, powerCurve } from "../analysis/powerCurve.js";
+import { DEFAULT_WINDOWS_SECONDS, powerCurve } from "../analysis/powerCurve.js";
 import { type Declined, type RideSummary, rideSummary } from "../analysis/summary.js";
 import { csv, day, hms, km, num, table, timestamp } from "../format.js";
 import type { HistorySnapshot, HistoryStore } from "../history/store.js";
@@ -203,9 +204,10 @@ export const TOOLS: ToolDefinition[] = [
         .number()
         .int()
         .positive()
+        .multipleOf(SAMPLE_INTERVAL_SECONDS)
         .max(600)
         .optional()
-        .describe("The stride in seconds instead; 60 gives one row per minute."),
+        .describe("The stride in seconds instead, a multiple of 10; 60 gives one row per minute."),
       maxRows: z.number().int().positive().max(1000).optional().describe("Default 200."),
     },
     handler: async (store, args) => {
@@ -214,9 +216,10 @@ export const TOOLS: ToolDefinition[] = [
       const note =
         requestedStride === null
           ? ""
-          : `\n\n(Downsampled to fit maxRows: one row per ${stride * SAMPLE_SECONDS} s instead of ` +
-            `${requestedStride * SAMPLE_SECONDS} s, ${rows.length} rows covering all ${total} samples in the ` +
-            "window. Raise maxRows or narrow the window for finer resolution.)";
+          : `\n\n(Downsampled to fit maxRows: one row per ${stride * SAMPLE_INTERVAL_SECONDS} s instead of ` +
+            `${requestedStride * SAMPLE_INTERVAL_SECONDS} s, ${rows.length} rows across the ${total} samples in the ` +
+            "window. Rows are every sample at that stride, not averages over it, so a peak between rows is " +
+            "not shown; get_workout has the true maxima. Raise maxRows or narrow the window for finer resolution.)";
       return csv(headers, rows) + note;
     },
   }),
@@ -289,6 +292,8 @@ export const TOOLS: ToolDefinition[] = [
         ["max resistance", ...chosen.map((s) => num(s.maxResistance, 0))],
         ["bpm (reported)", ...chosen.map((s) => num(s.reportedHeartRateBpm, 0))],
         ["bpm (filtered)", ...chosen.map((s) => num(s.filteredHeartRateBpm, 0))],
+        ["min bpm (reported)", ...chosen.map((s) => num(s.reportedMinHeartRateBpm, 0))],
+        ["min bpm (filtered)", ...chosen.map((s) => num(s.filteredMinHeartRateBpm, 0))],
         ["max bpm (reported)", ...chosen.map((s) => num(s.reportedMaxHeartRateBpm, 0))],
         ["max bpm (filtered)", ...chosen.map((s) => num(s.filteredMaxHeartRateBpm, 0))],
       ];
