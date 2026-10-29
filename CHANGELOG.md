@@ -33,6 +33,16 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
 
 ### Changed
 
+- **Unknown tool arguments are now an error.** An argument a tool does not take used
+  to be stripped by the SDK before the handler ran, so `summarize_history` with
+  `groupBy` for `bucket` answered with whole-history monthly totals shaped exactly
+  like a correct call. Each tool is now registered with a strict schema, and the
+  call fails with `Unknown argument 'groupBy'; summarize_history takes: from, to,
+  machineType, mode, bucket, windowsSeconds.` A caller that relied on extra keys
+  being ignored will now get that error instead.
+- `@modelcontextprotocol/sdk` floor raised from `^1.13.0` to `^1.22.0`, the first
+  release whose `registerTool` keeps an assembled schema as given; earlier ones wrap
+  it in `z.object()` again, which breaks every call.
 - Every tool description names its own arguments, so a model reading the tool
   listing knows `get_workout` takes `id` before its first call rather than after a
   rejected guess. Clients do not all surface the schema before a call; the

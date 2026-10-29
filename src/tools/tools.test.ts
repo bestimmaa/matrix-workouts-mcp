@@ -4,36 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { HistoryStore } from "../history/store.js";
-import { fixtureWorkout, fixtureWorkouts } from "../testSupport.js";
+import { fixtureWorkout, fixtureWorkouts, storeWith } from "../testSupport.js";
 import { TOOLS } from "./index.js";
-
-/**
- * A store that never touches the network: the snapshot is handed in.
- *
- * The tools are the part of this server a model actually sees, so they are tested
- * against real records rather than a mock of the parser. What is being asserted is
- * not that the numbers are pretty but that they are *there* — the whole reason this
- * project exists is three channels the platform's own UI omits, and a tool that
- * quietly dropped one would look perfectly fine in a conversation.
- */
-function storeWith(cacheDir = mkdtempSync(join(tmpdir(), "mw-mcp-")), onRead = (): void => {}): HistoryStore {
-  const store = new HistoryStore({ cacheDir, ttlMs: 60_000 });
-  const snapshot = {
-    workouts: fixtureWorkouts(),
-    fetchedAt: new Date("2026-09-14T08:00:00Z"),
-    truncated: false,
-    skipped: 0,
-    source: "cache" as const,
-  };
-  Object.defineProperty(store, "snapshotNow", {
-    value: async () => {
-      onRead();
-      return snapshot;
-    },
-  });
-  return store;
-}
 
 const tool = (name: string) => {
   const found = TOOLS.find((t) => t.name === name);

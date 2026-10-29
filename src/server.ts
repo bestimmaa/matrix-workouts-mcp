@@ -8,10 +8,11 @@ import { readFileSync } from "node:fs";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
 
 import { getCacheDir, getCacheTtlMs, getCredentials } from "./config.js";
 import { HistoryStore } from "./history/store.js";
-import { TOOLS } from "./tools/index.js";
+import { type ToolDefinition, TOOLS } from "./tools/index.js";
 
 export const SERVER_NAME = "matrix-workouts-mcp";
 
@@ -45,11 +46,31 @@ export function createStore(env: NodeJS.ProcessEnv = process.env): HistoryStore 
   });
 }
 
+/** A rejection a model can act on: the key it sent and the ones the tool takes. */
+function unknownArgument(tool: ToolDefinition): z.ZodErrorMap {
+  const accepted = Object.keys(tool.schema);
+  const takes = accepted.length === 0 ? "takes no arguments" : `takes: ${accepted.join(", ")}`;
+  return (issue, ctx) =>
+    issue.code === z.ZodIssueCode.unrecognized_keys
+      ? { message: `Unknown argument ${issue.keys.map((key) => `'${key}'`).join(", ")}; ${tool.name} ${takes}.` }
+      : { message: ctx.defaultError };
+}
+
 export function createServer(store: HistoryStore = createStore()): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
   for (const tool of TOOLS) {
-    server.tool(tool.name, tool.description, tool.schema, async (args: Record<string, unknown>) => {
+    /*
+     * Registered strict, so an argument the schema does not name is an error naming
+     * it rather than a key the SDK strips before the handler runs — `groupBy` for
+     * `bucket` used to come back as a whole-history answer shaped like a correct one.
+     * Strictness has to be on the registered schema: the SDK parses against it before
+     * the callback, so a strict parse in the handler would see the key already gone.
+     * It also needs an SDK that registers a `ZodObject` as given; before 1.22.0
+     * `registerTool` wrapped it in `z.object()` again, which breaks every call.
+     */
+    const inputSchema = z.object(tool.schema, { errorMap: unknownArgument(tool) }).strict();
+    server.registerTool(tool.name, { description: tool.description, inputSchema }, async (args) => {
       try {
         return { content: [{ type: "text" as const, text: await tool.handler(store, args) }] };
       } catch (error) {
