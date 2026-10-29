@@ -41,13 +41,11 @@ export function getHttpPort(env: NodeJS.ProcessEnv = process.env): number {
 }
 
 export function getHttpHost(env: NodeJS.ProcessEnv = process.env): string {
-  const host = env.MATRIX_HTTP_HOST;
-  return host && host.trim().length > 0 ? host.trim() : DEFAULT_HTTP_HOST;
+  return env.MATRIX_HTTP_HOST?.trim() || DEFAULT_HTTP_HOST;
 }
 
 export function getAuthToken(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const token = env.MATRIX_MCP_TOKEN;
-  return token && token.length > 0 ? token : undefined;
+  return env.MATRIX_MCP_TOKEN || undefined;
 }
 
 /**
@@ -65,9 +63,10 @@ export function getCredentials(env: NodeJS.ProcessEnv = process.env): Credential
 }
 
 export function getCacheDir(env: NodeJS.ProcessEnv = process.env): string {
-  const dir = env.MATRIX_CACHE_DIR;
-  if (dir && dir.trim().length > 0) return dir.trim();
-  return join(env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "matrix-workouts-mcp");
+  return (
+    env.MATRIX_CACHE_DIR?.trim() ||
+    join(env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "matrix-workouts-mcp")
+  );
 }
 
 export function getCacheTtlMs(env: NodeJS.ProcessEnv = process.env): number {

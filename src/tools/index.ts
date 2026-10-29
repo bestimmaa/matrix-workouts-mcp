@@ -12,8 +12,8 @@ import { type HistoryFilter, bucketHistory, filterWorkouts } from "../analysis/h
 import { DEFAULT_WINDOWS_SECONDS, powerCurve } from "../analysis/powerCurve.js";
 import { rideSummary } from "../analysis/summary.js";
 import { csv, day, hms, km, num, table, timestamp } from "../format.js";
-import type { HistoryStore } from "../history/store.js";
-import { describeControl, exportWorkoutTo, findOrThrow, sampleRows } from "./helpers.js";
+import type { HistorySnapshot, HistoryStore } from "../history/store.js";
+import { FIELD_NAMES, describeControl, exportWorkoutTo, findOrThrow, sampleRows } from "./helpers.js";
 
 const dateFilter = {
   from: z.string().optional().describe("Inclusive start date, YYYY-MM-DD."),
@@ -36,13 +36,6 @@ const rideFilter = {
   mode: z.string().optional().describe("Program mode, e.g. sprint_8, target_heart_rate."),
 } satisfies { [K in keyof Required<HistoryFilter>]: z.ZodType<HistoryFilter[K]> };
 
-const rideFilterSchema = z.object(rideFilter);
-
-/** Parse, never cast: the `args as never` this replaces is what hid the mismatch. */
-function rideFilterOf(args: Record<string, unknown>): HistoryFilter {
-  return rideFilterSchema.parse(args);
-}
-
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -50,9 +43,32 @@ export interface ToolDefinition {
   handler: (store: HistoryStore, args: Record<string, unknown>) => Promise<string>;
 }
 
-/** A line every tool appends, so no answer silently implies it is current. */
-async function provenance(store: HistoryStore): Promise<string> {
-  const snapshot = await store.snapshotNow();
+/**
+ * A tool whose handler sees its arguments typed by its own schema.
+ *
+ * Parse, never cast: the `args as never` this replaced is what hid the
+ * `summarize_history` mismatch, and the per-field casts that survived it could hide
+ * the next one. The SDK has already parsed against the same shape, so this costs a
+ * second pass over a handful of fields and buys a handler with no casts in it.
+ */
+function defineTool<Shape extends z.ZodRawShape>(tool: {
+  name: string;
+  description: string;
+  schema: Shape;
+  handler: (store: HistoryStore, args: z.infer<z.ZodObject<Shape>>) => Promise<string>;
+}): ToolDefinition {
+  const parser = z.object(tool.schema);
+  return { ...tool, handler: (store, args) => tool.handler(store, parser.parse(args)) };
+}
+
+/**
+ * A line every tool appends, so no answer silently implies it is current.
+ *
+ * Takes the snapshot the handler answered from rather than asking the store again: a
+ * second call could retry a failing network on a stale fallback, and describe a
+ * different history from the one the rows above it came from.
+ */
+function provenance(snapshot: HistorySnapshot): string {
   const parts = [
     `${snapshot.workouts.length} rides, ${snapshot.source} of ${timestamp(snapshot.fetchedAt)}Z`,
   ];
@@ -62,7 +78,7 @@ async function provenance(store: HistoryStore): Promise<string> {
 }
 
 export const TOOLS: ToolDefinition[] = [
-  {
+  defineTool({
     name: "list_workouts",
     description:
       "List recorded rides, newest first, one compact row each: date, program mode, duration, distance, average power and heart rate. Use this first to find the id of a ride before asking for its detail. Returns no sample series.",
@@ -71,9 +87,9 @@ export const TOOLS: ToolDefinition[] = [
       limit: z.number().int().positive().max(500).optional().describe("Default 20."),
     },
     handler: async (store, args) => {
-      const { workouts } = await store.snapshotNow();
-      const matched = filterWorkouts(workouts, rideFilterOf(args));
-      const limit = (args.limit as number | undefined) ?? 20;
+      const snapshot = await store.snapshotNow();
+      const matched = filterWorkouts(snapshot.workouts, args);
+      const limit = args.limit ?? 20;
       const rows = matched.slice(0, limit).map((workout) => {
         const s = rideSummary(workout);
         return [
@@ -91,19 +107,18 @@ export const TOOLS: ToolDefinition[] = [
       return (
         `${header}\n\n` +
         table(["id", "date", "mode", "dur", "km", "W", "bpm", "samples"], rows) +
-        (await provenance(store))
+        provenance(snapshot)
       );
     },
-  },
-  {
+  }),
+  defineTool({
     name: "get_workout",
     description:
       "Everything derived about one ride: duration, distance, work done, average and peak power, cadence, resistance, both heart-rate averages, and what the console was actually holding constant — with the resistance metrics behind that call, because the series alone does not always settle it. Does not return the sample series — use get_samples for that.",
     schema: { id: z.string().describe("Workout id, from list_workouts. Either id form works.") },
     handler: async (store, args) => {
-      const { workouts } = await store.snapshotNow();
-      const workout = findOrThrow(workouts, String(args.id));
-      const s = rideSummary(workout);
+      const snapshot = await store.snapshotNow();
+      const s = rideSummary(findOrThrow(snapshot.workouts, args.id));
       const rows: [string, string][] = [
         ["date", `${timestamp(s.startedAt)}Z`],
         ["mode", `${s.mode} (${s.machineType})`],
@@ -126,17 +141,17 @@ export const TOOLS: ToolDefinition[] = [
             "ahead of the dropouts the interval series preserves. On a glitching strap the " +
             "reported figure is usually the better one."
           : "";
-      return table(["field", "value"], rows) + note + (await provenance(store));
+      return table(["field", "value"], rows) + note + provenance(snapshot);
     },
-  },
-  {
+  }),
+  defineTool({
     name: "get_samples",
     description:
       "The raw interval series for one ride as CSV — power, cadence, resistance, heart rate, speed, one row per 10 seconds. Ask for a window and a stride rather than a whole ride: a full ride is several hundred rows.",
     schema: {
       id: z.string(),
       fields: z
-        .array(z.enum(["power", "cadence", "resistance", "heartRate", "speed", "distance"]))
+        .array(z.enum(FIELD_NAMES))
         .optional()
         .describe("Default: power, cadence, resistance, heartRate."),
       fromSeconds: z.number().int().min(0).optional(),
@@ -146,15 +161,14 @@ export const TOOLS: ToolDefinition[] = [
     },
     handler: async (store, args) => {
       const { workouts } = await store.snapshotNow();
-      const workout = findOrThrow(workouts, String(args.id));
-      const { headers, rows, truncated, total } = sampleRows(workout, args);
+      const { headers, rows, truncated, total } = sampleRows(findOrThrow(workouts, args.id), args);
       const note = truncated
         ? `\n\n(${rows.length} of ${total} rows; raise maxRows, widen everyNth, or narrow the window.)`
         : "";
       return csv(headers, rows) + note;
     },
-  },
-  {
+  }),
+  defineTool({
     name: "summarize_history",
     description:
       "Training volume per week or month — rides, time, distance, work, average power and heart rate — plus the all-time power curve over the matched rides. Takes the same date, machine and mode filters as list_workouts, and both the totals and the curve are computed over what matched, so filter by mode to keep a Sprint 8's spikes out of a steady-state summary. This is the tool for questions about trends, totals and bests.",
@@ -167,9 +181,9 @@ export const TOOLS: ToolDefinition[] = [
         .describe(`Power-curve durations. Default ${DEFAULT_WINDOWS_SECONDS.join(", ")}.`),
     },
     handler: async (store, args) => {
-      const { workouts } = await store.snapshotNow();
-      const matched = filterWorkouts(workouts, rideFilterOf(args));
-      const bucket = (args.bucket as "week" | "month" | undefined) ?? "month";
+      const snapshot = await store.snapshotNow();
+      const matched = filterWorkouts(snapshot.workouts, args);
+      const bucket = args.bucket ?? "month";
 
       const totals = bucketHistory(matched, bucket).map((b) => [
         b.bucket,
@@ -181,10 +195,7 @@ export const TOOLS: ToolDefinition[] = [
         num(b.averageHeartRateBpm, 0),
       ]);
 
-      const curve = powerCurve(
-        matched,
-        (args.windowsSeconds as number[] | undefined) ?? [...DEFAULT_WINDOWS_SECONDS],
-      ).map((point) => [
+      const curve = powerCurve(matched, args.windowsSeconds).map((point) => [
         hms(point.windowSeconds),
         num(point.watts, 0),
         day(point.startedAt),
@@ -197,18 +208,18 @@ export const TOOLS: ToolDefinition[] = [
         table([bucket, "rides", "time", "km", "kJ", "W", "bpm"], totals) +
         "\n\nPower curve — best sustained average\n" +
         table(["window", "W", "date", "ride"], curve) +
-        (await provenance(store))
+        provenance(snapshot)
       );
     },
-  },
-  {
+  }),
+  defineTool({
     name: "compare_workouts",
     description:
       "Two or more rides side by side on every derived number. Use it for 'how did today compare to last Tuesday' rather than calling get_workout repeatedly.",
     schema: { ids: z.array(z.string()).min(2).max(8) },
     handler: async (store, args) => {
-      const { workouts } = await store.snapshotNow();
-      const chosen = (args.ids as string[]).map((id) => rideSummary(findOrThrow(workouts, id)));
+      const snapshot = await store.snapshotNow();
+      const chosen = args.ids.map((id) => rideSummary(findOrThrow(snapshot.workouts, id)));
       const rows: string[][] = [
         ["date", ...chosen.map((s) => day(s.startedAt))],
         ["mode", ...chosen.map((s) => s.mode)],
@@ -228,11 +239,11 @@ export const TOOLS: ToolDefinition[] = [
       return (
         table(["", ...chosen.map((s) => s.id.slice(-6))], rows) +
         "\n\nColumns are the last six characters of each ride id, in the order given." +
-        (await provenance(store))
+        provenance(snapshot)
       );
     },
-  },
-  {
+  }),
+  defineTool({
     name: "export_workout",
     description:
       "Write one ride to disk as a lossless JSON export document — normalized telemetry plus the upstream record verbatim. Returns the path, not the contents, because the document is far too large to read into a conversation.",
@@ -242,12 +253,12 @@ export const TOOLS: ToolDefinition[] = [
     },
     handler: async (store, args) => {
       const { workouts } = await store.snapshotNow();
-      const workout = findOrThrow(workouts, String(args.id));
-      const written = exportWorkoutTo(workout, args.path as string | undefined, store.cacheDir);
+      const workout = findOrThrow(workouts, args.id);
+      const written = exportWorkoutTo(workout, args.path, store.cacheDir);
       return `Wrote ${workout.samples.length} samples to ${written}`;
     },
-  },
-  {
+  }),
+  defineTool({
     name: "refresh_history",
     description:
       "Re-download the whole history from the API, replacing the cache. Needs credentials. Everything else answers from the cache, so call this only when a ride is missing because it happened since the last fetch.",
@@ -265,5 +276,5 @@ export const TOOLS: ToolDefinition[] = [
       }
       return lines.join("\n");
     },
-  },
+  }),
 ];

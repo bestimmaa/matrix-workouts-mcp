@@ -6,10 +6,16 @@
  * ride history on a port: it **refuses to start without a token**, and it binds
  * loopback unless told otherwise. Neither is a default to relax without meaning it.
  */
-import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
 import { getAuthToken, getHttpHost, getHttpPort } from "../config.js";
+import type { HistoryStore } from "../history/store.js";
 import { createServer, createStore } from "../server.js";
 import { isAuthenticatedRequest } from "./auth.js";
 
@@ -32,7 +38,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return raw.length === 0 ? undefined : JSON.parse(raw);
 }
 
-export async function startHttpServer(): Promise<import("node:http").Server> {
+export async function startHttpServer(): Promise<Server> {
   const authToken = getAuthToken();
   if (!authToken) {
     throw new Error(
@@ -83,7 +89,7 @@ export async function startHttpServer(): Promise<import("node:http").Server> {
 async function handleMcpRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  store: ReturnType<typeof createStore>,
+  store: HistoryStore,
 ): Promise<void> {
   if (req.method !== "POST") {
     sendJsonRpcError(res, 405, -32000, "Method not allowed. This server only supports stateless POST requests.");

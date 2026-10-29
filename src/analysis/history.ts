@@ -7,7 +7,7 @@
  */
 import type { Workout } from "matrix-workouts-core";
 
-import { rideSummary } from "./summary.js";
+import { mean, rideSummary, type RideSummary } from "./summary.js";
 
 export type Bucket = "week" | "month";
 
@@ -33,46 +33,31 @@ function bucketKey(date: Date, bucket: Bucket): string {
 }
 
 export function bucketHistory(workouts: readonly Workout[], bucket: Bucket): BucketTotals[] {
-  const buckets = new Map<string, { totals: BucketTotals; power: number[]; hr: number[] }>();
-
+  const buckets = new Map<string, RideSummary[]>();
   for (const workout of workouts) {
     const key = bucketKey(workout.startedAt, bucket);
-    const entry = buckets.get(key) ?? {
-      totals: {
-        bucket: key,
-        rides: 0,
-        durationSeconds: 0,
-        distanceMeters: 0,
-        workKilojoules: 0,
-        averagePowerWatts: null,
-        averageHeartRateBpm: null,
-      },
-      power: [],
-      hr: [],
-    };
-
-    const summary = rideSummary(workout);
-    entry.totals.rides += 1;
-    entry.totals.durationSeconds += workout.durationSeconds;
-    entry.totals.distanceMeters += workout.distanceMeters;
-    entry.totals.workKilojoules += summary.workKilojoules ?? 0;
-    if (summary.averagePowerWatts !== null) entry.power.push(summary.averagePowerWatts);
-    // The reported figure, because it is the one that survives a bad strap.
-    if (summary.reportedHeartRateBpm !== null) entry.hr.push(summary.reportedHeartRateBpm);
-
-    buckets.set(key, entry);
+    const rides = buckets.get(key) ?? [];
+    rides.push(rideSummary(workout));
+    buckets.set(key, rides);
   }
 
-  const mean = (values: number[]): number | null =>
-    values.length === 0 ? null : values.reduce((a, b) => a + b, 0) / values.length;
+  const total = (rides: readonly RideSummary[], pick: (s: RideSummary) => number | null): number =>
+    rides.reduce((sum, s) => sum + (pick(s) ?? 0), 0);
+  const present = (rides: readonly RideSummary[], pick: (s: RideSummary) => number | null): number[] =>
+    rides.map(pick).filter((value): value is number => value !== null);
 
-  return [...buckets.values()]
-    .map(({ totals, power, hr }) => ({
-      ...totals,
-      averagePowerWatts: mean(power),
-      averageHeartRateBpm: mean(hr),
+  return [...buckets]
+    .map(([key, rides]) => ({
+      bucket: key,
+      rides: rides.length,
+      durationSeconds: total(rides, (s) => s.durationSeconds),
+      distanceMeters: total(rides, (s) => s.distanceMeters),
+      workKilojoules: total(rides, (s) => s.workKilojoules),
+      averagePowerWatts: mean(present(rides, (s) => s.averagePowerWatts)),
+      // The reported figure, because it is the one that survives a bad strap.
+      averageHeartRateBpm: mean(present(rides, (s) => s.reportedHeartRateBpm)),
     }))
-    .sort((a, b) => (a.bucket < b.bucket ? -1 : 1));
+    .sort((a, b) => a.bucket.localeCompare(b.bucket));
 }
 
 export interface HistoryFilter {
