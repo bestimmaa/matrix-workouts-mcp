@@ -13,7 +13,14 @@ import { DEFAULT_WINDOWS_SECONDS, powerCurve } from "../analysis/powerCurve.js";
 import { rideSummary } from "../analysis/summary.js";
 import { csv, day, hms, km, num, table, timestamp } from "../format.js";
 import type { HistorySnapshot, HistoryStore } from "../history/store.js";
-import { FIELD_NAMES, describeControl, exportWorkoutTo, findOrThrow, sampleRows } from "./helpers.js";
+import {
+  FIELD_NAMES,
+  SAMPLE_SECONDS,
+  describeControl,
+  exportWorkoutTo,
+  findOrThrow,
+  sampleRows,
+} from "./helpers.js";
 
 const dateFilter = {
   from: z.string().optional().describe("Inclusive start date, YYYY-MM-DD."),
@@ -147,7 +154,7 @@ export const TOOLS: ToolDefinition[] = [
   defineTool({
     name: "get_samples",
     description:
-      "The raw interval series for one ride as CSV — power, cadence, resistance, heart rate, speed, one row per 10 seconds. Ask for a window and a stride rather than a whole ride: a full ride is several hundred rows.",
+      "The raw interval series for one ride as CSV — power, cadence, resistance, heart rate, speed, one row per 10 seconds. A full ride is several hundred rows, so a window or stride that would exceed the row limit is downsampled to fit, never cut short; the note under the CSV says when that happened.",
     schema: {
       id: z.string(),
       fields: z
@@ -157,14 +164,24 @@ export const TOOLS: ToolDefinition[] = [
       fromSeconds: z.number().int().min(0).optional(),
       toSeconds: z.number().int().min(0).optional(),
       everyNth: z.number().int().positive().max(60).optional().describe("Stride; 6 gives one row per minute."),
+      resolutionSeconds: z
+        .number()
+        .int()
+        .positive()
+        .max(600)
+        .optional()
+        .describe("The stride in seconds instead; 60 gives one row per minute."),
       maxRows: z.number().int().positive().max(1000).optional().describe("Default 200."),
     },
     handler: async (store, args) => {
       const { workouts } = await store.snapshotNow();
-      const { headers, rows, truncated, total } = sampleRows(findOrThrow(workouts, args.id), args);
-      const note = truncated
-        ? `\n\n(${rows.length} of ${total} rows; raise maxRows, widen everyNth, or narrow the window.)`
-        : "";
+      const { headers, rows, total, stride, requestedStride } = sampleRows(findOrThrow(workouts, args.id), args);
+      const note =
+        requestedStride === null
+          ? ""
+          : `\n\n(Downsampled to fit maxRows: one row per ${stride * SAMPLE_SECONDS} s instead of ` +
+            `${requestedStride * SAMPLE_SECONDS} s, ${rows.length} rows covering all ${total} samples in the ` +
+            "window. Raise maxRows or narrow the window for finer resolution.)";
       return csv(headers, rows) + note;
     },
   }),

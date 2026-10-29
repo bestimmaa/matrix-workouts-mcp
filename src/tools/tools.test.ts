@@ -131,15 +131,54 @@ describe("get_samples", () => {
     expect(rows[0]?.split(",")).toHaveLength(5);
   });
 
-  it("caps rows and says so, instead of flooding the conversation", async () => {
-    const text = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", maxRows: 10 });
-    expect(text).toContain("10 of 362 rows");
+  const dataRows = (text: string) => text.split("\n").filter((line) => /^\d/.test(line));
+
+  /*
+   * The bug was truncation from the front: a default call on a 362-sample ride came
+   * back as its first 200 rows, a well-formed CSV of the first two thirds of the ride
+   * with nothing but a trailing note to say so. The last row is the assertion that
+   * matters — the answer has to reach the end of the ride.
+   */
+  it("downsamples a ride too long for maxRows rather than cutting it short", async () => {
+    const text = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2" });
+    const rows = dataRows(text);
+    expect(rows.length).toBeLessThanOrEqual(200);
+    expect(Number(rows.at(-1)?.split(",")[0])).toBeGreaterThan(3500);
+    expect(text).toContain("one row per 20 s instead of 10 s, 181 rows covering all 362 samples");
+  });
+
+  it("raises the stride to the smallest that fits, and says nothing when none is needed", async () => {
+    const tight = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", maxRows: 10 });
+    expect(dataRows(tight)).toHaveLength(10);
+    const roomy = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", maxRows: 1000 });
+    expect(dataRows(roomy)).toHaveLength(362);
+    expect(roomy).not.toContain("Downsampled");
+  });
+
+  it("keeps an explicit window, downsampling only within it", async () => {
+    const text = await run("get_samples", {
+      id: "6a998daf8d2b6d09c6e334d2",
+      fromSeconds: 600,
+      toSeconds: 1190,
+      maxRows: 30,
+    });
+    const seconds = dataRows(text).map((row) => Number(row.split(",")[0]));
+    expect(seconds[0]).toBe(600);
+    expect(seconds.at(-1)).toBeGreaterThanOrEqual(1160);
+    expect(seconds.every((s) => s >= 600 && s <= 1190)).toBe(true);
+  });
+
+  it("takes the stride as a resolution in seconds", async () => {
+    const text = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", resolutionSeconds: 60 });
+    expect(dataRows(text)).toHaveLength(61);
+    await expect(
+      run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", everyNth: 6, resolutionSeconds: 60 }),
+    ).rejects.toThrow(/not both/);
   });
 
   it("strides, so a whole ride fits in a readable number of rows", async () => {
     const text = await run("get_samples", { id: "6a998daf8d2b6d09c6e334d2", everyNth: 6 });
-    const rows = text.split("\n").filter((line) => /^\d/.test(line));
-    expect(rows.length).toBe(61);
+    expect(dataRows(text)).toHaveLength(61);
   });
 
   it("blanks a dropout rather than emitting the console's zero", async () => {

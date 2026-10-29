@@ -69,7 +69,7 @@ against it. No passcode in a config file, no sign-in from the server at all.
 |---|---|
 | `list_workouts` | Rides newest first, one compact row each. Filter by date, machine or program mode. No sample series. |
 | `get_workout` | One ride in full: work, power, cadence, resistance, both heart-rate averages, and what the console was holding constant. |
-| `get_samples` | The 10-second interval series as CSV, over a window and a stride you choose. |
+| `get_samples` | The 10-second interval series as CSV, over a window and a stride you choose. Downsampled to fit the row limit, never cut short. |
 | `summarize_history` | Volume by week or month, plus the power curve over the matched rides. Same date, machine and mode filters as `list_workouts`. |
 | `compare_workouts` | Two to eight rides side by side on every derived number. |
 | `export_workout` | Writes a lossless JSON export document and returns the path. |

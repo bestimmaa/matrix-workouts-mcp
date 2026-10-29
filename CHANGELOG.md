@@ -26,9 +26,15 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
 - The server introduced itself to MCP clients as version 0.1.0 whatever was
   installed; it now reads the version from package.json.
 - Durations that were not a whole number of seconds could print as `1:60`.
+- `get_samples` cut a window too long for `maxRows` short instead of covering it, so
+  a default call on a 47-minute ride returned its first 33 minutes as a well-formed
+  CSV with only a trailing note to say so. It now raises the stride to the smallest
+  that fits and says it did; a part of a ride is what `fromSeconds`/`toSeconds` are for.
 
 ### Changed
 
+- `get_samples` accepts `resolutionSeconds` as an alternative to `everyNth`: 60 is
+  one row per minute, without the caller having to know the sample interval.
 - `get_workout` renders the control signature's metrics alongside its verdict, and
   names the controlled channel when the program mode already states it. The
   classifier returns "unclassified" for closed-loop heart-rate rides by design,

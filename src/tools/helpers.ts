@@ -77,12 +77,28 @@ const FIELDS: Record<FieldName, (s: Sample) => number> = {
 
 const DEFAULT_FIELDS: readonly FieldName[] = ["power", "cadence", "resistance", "heartRate"];
 
+/** The console writes one sample every 10 seconds; see `analysis/powerCurve.ts`. */
+export const SAMPLE_SECONDS = 10;
+
 export interface SampleQuery {
   fields?: readonly FieldName[] | undefined;
   fromSeconds?: number | undefined;
   toSeconds?: number | undefined;
   everyNth?: number | undefined;
+  /** The same stride in the unit a caller thinks in: 60 is one row per minute. */
+  resolutionSeconds?: number | undefined;
   maxRows?: number | undefined;
+}
+
+export interface SampleTable {
+  headers: string[];
+  rows: (string | number)[][];
+  /** Samples inside the window, before any stride. */
+  total: number;
+  /** The stride the rows were taken at. */
+  stride: number;
+  /** The stride asked for, when it had to be raised to fit `maxRows`. */
+  requestedStride: number | null;
 }
 
 /**
@@ -91,15 +107,26 @@ export interface SampleQuery {
  * A dropout is emitted as an empty cell rather than the console's `0`, because a zero
  * in a heart-rate column is a number a model will happily average. The filtering is
  * the core package's, so this agrees with what the extension draws.
+ *
+ * A window too long for `maxRows` at the requested stride is downsampled, never cut
+ * short: the stride rises to the smallest that fits. Taking the first `maxRows` rows
+ * returned the first two thirds of a ride as a well-formed CSV indistinguishable from
+ * the whole of it, and a model averaging that column had no way to know. A caller who
+ * wants part of a ride has `fromSeconds` and `toSeconds` for that.
  */
-export function sampleRows(
-  workout: Workout,
-  query: SampleQuery,
-): { headers: string[]; rows: (string | number)[][]; truncated: boolean; total: number } {
+export function sampleRows(workout: Workout, query: SampleQuery): SampleTable {
+  if (query.everyNth !== undefined && query.resolutionSeconds !== undefined) {
+    throw new ToolError("Pass everyNth or resolutionSeconds, not both: they are the same stride.");
+  }
   const fields = query.fields?.length ? query.fields : DEFAULT_FIELDS;
   const from = query.fromSeconds ?? 0;
   const to = query.toSeconds ?? Number.POSITIVE_INFINITY;
-  const stride = Math.max(1, Math.trunc(query.everyNth ?? 1));
+  const requested = Math.max(
+    1,
+    query.resolutionSeconds !== undefined
+      ? Math.round(query.resolutionSeconds / SAMPLE_SECONDS)
+      : Math.trunc(query.everyNth ?? 1),
+  );
   const maxRows = Math.max(1, Math.trunc(query.maxRows ?? 200));
 
   /*
@@ -109,27 +136,28 @@ export function sampleRows(
    */
   const valid = fields.includes("heartRate") ? flagHeartRateDropouts(workout.samples) : [];
 
-  const windowed = workout.samples
+  const inWindow = workout.samples
     .map((sample, index) => ({ sample, index }))
-    .filter(({ sample }) => sample.elapsedSeconds >= from && sample.elapsedSeconds <= to)
-    .filter((_, i) => i % stride === 0);
+    .filter(({ sample }) => sample.elapsedSeconds >= from && sample.elapsedSeconds <= to);
+  const stride = Math.max(requested, Math.ceil(inWindow.length / maxRows));
 
-  const rows = windowed.slice(0, maxRows).map(({ sample, index }) =>
-    [
+  const rows = inWindow
+    .filter((_, i) => i % stride === 0)
+    .map(({ sample, index }) => [
       sample.elapsedSeconds,
       ...fields.map((field) => {
         if (field === "heartRate" && valid[index] === false) return "";
         const value = FIELDS[field](sample);
         return Number.isFinite(value) ? Math.round(value * 10) / 10 : "";
       }),
-    ],
-  );
+    ]);
 
   return {
     headers: ["seconds", ...fields],
     rows,
-    truncated: windowed.length > rows.length,
-    total: windowed.length,
+    total: inWindow.length,
+    stride,
+    requestedStride: stride > requested ? requested : null,
   };
 }
 
