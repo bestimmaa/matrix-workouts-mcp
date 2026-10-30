@@ -193,6 +193,16 @@ describe("summarize_history", () => {
     expect(text).toMatch(/1:00\s+\d+/);
   });
 
+  /*
+   * `bestWindow` rounds a window down to whole samples, so 15 s was computed over one
+   * 10 s sample and printed under a 0:15 label, and 5 s rounded to nothing and left the
+   * curve without a row or a word about it.
+   */
+  it("refuses a power-curve window that is not a multiple of the sample interval", async () => {
+    await expect(run("summarize_history", { windowsSeconds: [15] })).rejects.toThrow(/multiple of 10/);
+    expect(await run("summarize_history", { windowsSeconds: [30] })).toMatch(/0:30\s+\d+/);
+  });
+
   it("accepts week buckets", async () => {
     expect(await run("summarize_history", { bucket: "week" })).toContain("Volume by week");
   });

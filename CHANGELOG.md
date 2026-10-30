@@ -35,6 +35,11 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
   whole of the September it named and a `from` given as a datetime excluded its own
   day, each with a count that looked right. Both now require `YYYY-MM-DD` and refuse
   anything else by name.
+- `summarize_history` accepted any positive `windowsSeconds`. The curve rounds a window
+  down to whole 10-second samples, so 15 s was averaged over one sample and printed
+  under a 0:15 label, and 5 s rounded to nothing and left the curve without a row or a
+  word. Windows must now be multiples of the sample interval, as `resolutionSeconds`
+  already is.
 
 ### Changed
 

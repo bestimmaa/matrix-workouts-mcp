@@ -243,10 +243,15 @@ export const TOOLS: ToolDefinition[] = [
     schema: {
       ...rideFilter,
       bucket: z.enum(["week", "month"]).optional().describe("Default month."),
+      // A multiple of the sample interval, as `resolutionSeconds` is: a 15 s window
+      // was averaged over one 10 s sample and labelled 0:15, and a 5 s one vanished.
       windowsSeconds: z
-        .array(z.number().int().positive())
+        .array(z.number().int().positive().multipleOf(SAMPLE_INTERVAL_SECONDS))
         .optional()
-        .describe(`Power-curve durations. Default ${DEFAULT_WINDOWS_SECONDS.join(", ")}.`),
+        .describe(
+          `Power-curve durations in seconds, multiples of ${SAMPLE_INTERVAL_SECONDS}. ` +
+            `Default ${DEFAULT_WINDOWS_SECONDS.join(", ")}.`,
+        ),
     },
     handler: async (store, args) => {
       const snapshot = await store.snapshotNow();
