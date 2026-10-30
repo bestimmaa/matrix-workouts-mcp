@@ -16,9 +16,22 @@ import { csv, day, hms, km, num, table, timestamp } from "../format.js";
 import type { HistorySnapshot, HistoryStore } from "../history/store.js";
 import { FIELD_NAMES, describeControl, exportWorkoutTo, findOrThrow, sampleRows } from "./helpers.js";
 
+/**
+ * A date is the ten characters the description promises, enforced. `filterWorkouts`
+ * compares dates as strings, so anything else reaching it is compared as a prefix:
+ * `to: "2026-09"` for "through September" excluded the whole of September, a `from`
+ * given as a datetime excluded its own day, and each came back with a count that
+ * looked right. A refusal names the form; a wrong scope names nothing.
+ */
+const isoDay = (what: string) =>
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, `${what} must be a date in YYYY-MM-DD form.`)
+    .optional();
+
 const dateFilter = {
-  from: z.string().optional().describe("Inclusive start date, YYYY-MM-DD."),
-  to: z.string().optional().describe("Inclusive end date, YYYY-MM-DD."),
+  from: isoDay("from").describe("Inclusive start date, YYYY-MM-DD."),
+  to: isoDay("to").describe("Inclusive end date, YYYY-MM-DD."),
 };
 
 /**

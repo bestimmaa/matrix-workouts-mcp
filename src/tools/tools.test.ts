@@ -20,7 +20,7 @@ const tool = (name: string) => {
  * no client can reach, and hides exactly the bug below: a filter the handler applied
  * faithfully to a parameter the schema had already thrown away.
  */
-const run = (name: string, args: Record<string, unknown> = {}, store = storeWith()) => {
+const run = async (name: string, args: Record<string, unknown> = {}, store = storeWith()) => {
   const found = tool(name);
   return found.handler(store, z.object(found.schema).parse(args));
 };
@@ -54,6 +54,19 @@ describe("list_workouts", () => {
   it("filters by mode and by date, and says how many matched", async () => {
     expect(await run("list_workouts", { mode: "sprint_8" })).toContain("1 ride(s) matched");
     expect(await run("list_workouts", { from: "2030-01-01" })).toContain("0 ride(s) matched");
+  });
+
+  /*
+   * The filter compares dates as strings, so a value that was not a full day was
+   * compared as a prefix: "2026-09" for `to` excluded the September it named, and a
+   * datetime for `from` excluded its own day, each with a count that looked right.
+   */
+  it("refuses a date that is not YYYY-MM-DD rather than comparing it as a prefix", async () => {
+    for (const name of ["list_workouts", "summarize_history"]) {
+      await expect(run(name, { to: "2026-09" })).rejects.toThrow(/YYYY-MM-DD/);
+      await expect(run(name, { from: "2026-09-03T00:00:00Z" })).rejects.toThrow(/YYYY-MM-DD/);
+    }
+    expect(await run("list_workouts", { from: "2026-09-03", to: "2026-09-03" })).toContain("1 ride(s) matched");
   });
 
   it("honours the limit without lying about the total", async () => {
