@@ -40,6 +40,9 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
   under a 0:15 label, and 5 s rounded to nothing and left the curve without a row or a
   word. Windows must now be multiples of the sample interval, as `resolutionSeconds`
   already is.
+- The release script defined the check that `origin` is this repository and never
+  called it, so it would have tagged and packed a release from a fork while AGENTS.md
+  said it refused to. It now runs the check.
 
 ### Changed
 

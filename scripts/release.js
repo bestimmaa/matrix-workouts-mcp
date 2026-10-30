@@ -107,6 +107,19 @@ function isExpectedGithubRemote(url) {
   return new RegExp(`github\\.com[:/]${expectedGithubRepoSlug}(?:\\.git)?$`, "i").test(url);
 }
 
+function ensureExpectedRemote() {
+  let url;
+  try {
+    url = run("git", ["remote", "get-url", "origin"]).trim();
+  } catch {
+    throw new Error(`Release requires an origin remote, and it must be ${expectedGithubRemoteUrl}.`);
+  }
+
+  if (!isExpectedGithubRemote(url)) {
+    throw new Error(`Release requires origin to be ${expectedGithubRemoteUrl}, not ${url}.`);
+  }
+}
+
 function restoreReleaseFiles() {
   const restorableFiles = releaseFiles.filter((file) => existsSync(path.resolve(process.cwd(), file)));
 
@@ -182,6 +195,7 @@ function main(argv = process.argv.slice(2)) {
   const expectedVersion = getNextVersion(releaseType);
   ensureChangelogEntry(expectedVersion);
   ensureMainBranch();
+  ensureExpectedRemote();
   const preReleaseHead = getHeadCommit();
   const expectedTag = `v${expectedVersion}`;
   const hadExpectedTagBeforeRelease = hasGitRef(expectedTag);
@@ -234,6 +248,7 @@ if (isMain) {
 
 export {
   ensureCleanWorktree,
+  ensureExpectedRemote,
   ensureReleaseType,
   main
 };
