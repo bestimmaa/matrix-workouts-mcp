@@ -56,6 +56,11 @@ describe("README documents the server's surface", () => {
     expect(missing).toEqual([]);
   });
 
+  it("has no row for a variable the server does not read", () => {
+    const read: readonly string[] = ENV_VARS;
+    expect(documentedVars.filter((name) => !read.includes(name))).toEqual([]);
+  });
+
   /*
    * A model reads a tool's name and description first; whether it sees the schema
    * before its first call depends on the client. An argument named only in the schema
