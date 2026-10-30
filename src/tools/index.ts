@@ -84,7 +84,7 @@ function defineTool<Shape extends z.ZodRawShape>(tool: {
  */
 function provenance(snapshot: HistorySnapshot): string {
   const parts = [
-    `${snapshot.workouts.length} rides, ${snapshot.source} of ${timestamp(snapshot.fetchedAt)}Z`,
+    `${snapshot.workouts.length} rides, ${snapshot.source} of ${timestamp(snapshot.fetchedAt)}`,
   ];
   if (snapshot.skipped > 0) parts.push(`${snapshot.skipped} unreadable record(s)`);
   if (snapshot.truncated) parts.push("WARNING: the API's paging says there is more history than arrived");
@@ -166,7 +166,7 @@ export const TOOLS: ToolDefinition[] = [
       const snapshot = await store.snapshotNow();
       const s = rideSummary(findOrThrow(snapshot.workouts, args.id));
       const rows: [string, string][] = [
-        ["date", `${timestamp(s.startedAt)}Z`],
+        ["date", timestamp(s.startedAt)],
         ["mode", `${s.mode} (${s.machineType})`],
         ["control", describeControl(s.mode, s.control)],
         ["duration", hms(s.durationSeconds)],
@@ -345,7 +345,7 @@ export const TOOLS: ToolDefinition[] = [
     handler: async (store) => {
       const snapshot = await store.refresh();
       const lines = [
-        `Downloaded ${snapshot.workouts.length} ride(s) at ${timestamp(snapshot.fetchedAt)}Z.`,
+        `Downloaded ${snapshot.workouts.length} ride(s) at ${timestamp(snapshot.fetchedAt)}.`,
       ];
       if (snapshot.skipped > 0) {
         lines.push(`${snapshot.skipped} record(s) could not be parsed and are not included.`);
