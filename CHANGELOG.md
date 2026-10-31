@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The version history source of truth is git tags in the format `vMAJOR.MINOR.PATCH`.
 
-## [Unreleased]
+## [0.2.1] - 2026-10-31
 
 ### Changed
 
