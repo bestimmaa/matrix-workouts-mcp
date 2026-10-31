@@ -30,6 +30,19 @@ The version history source of truth is git tags in the format `vMAJOR.MINOR.PATC
   a default call on a 47-minute ride returned its first 33 minutes as a well-formed
   CSV with only a trailing note to say so. It now raises the stride to the smallest
   that fits and says it did; a part of a ride is what `fromSeconds`/`toSeconds` are for.
+- `list_workouts` and `summarize_history` took any string for `from` and `to` and
+  compared it against each ride's date as a prefix, so `to: "2026-09"` excluded the
+  whole of the September it named and a `from` given as a datetime excluded its own
+  day, each with a count that looked right. Both now require `YYYY-MM-DD` and refuse
+  anything else by name.
+- `summarize_history` accepted any positive `windowsSeconds`. The curve rounds a window
+  down to whole 10-second samples, so 15 s was averaged over one sample and printed
+  under a 0:15 label, and 5 s rounded to nothing and left the curve without a row or a
+  word. Windows must now be multiples of the sample interval, as `resolutionSeconds`
+  already is.
+- The release script defined the check that `origin` is this repository and never
+  called it, so it would have tagged and packed a release from a fork while AGENTS.md
+  said it refused to. It now runs the check.
 
 ### Changed
 

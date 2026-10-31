@@ -16,9 +16,22 @@ import { csv, day, hms, km, num, table, timestamp } from "../format.js";
 import type { HistorySnapshot, HistoryStore } from "../history/store.js";
 import { FIELD_NAMES, describeControl, exportWorkoutTo, findOrThrow, sampleRows } from "./helpers.js";
 
+/**
+ * A date is the ten characters the description promises, enforced. `filterWorkouts`
+ * compares dates as strings, so anything else reaching it is compared as a prefix:
+ * `to: "2026-09"` for "through September" excluded the whole of September, a `from`
+ * given as a datetime excluded its own day, and each came back with a count that
+ * looked right. A refusal names the form; a wrong scope names nothing.
+ */
+const isoDay = (what: string) =>
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, `${what} must be a date in YYYY-MM-DD form.`)
+    .optional();
+
 const dateFilter = {
-  from: z.string().optional().describe("Inclusive start date, YYYY-MM-DD."),
-  to: z.string().optional().describe("Inclusive end date, YYYY-MM-DD."),
+  from: isoDay("from").describe("Inclusive start date, YYYY-MM-DD."),
+  to: isoDay("to").describe("Inclusive end date, YYYY-MM-DD."),
 };
 
 /**
@@ -71,7 +84,7 @@ function defineTool<Shape extends z.ZodRawShape>(tool: {
  */
 function provenance(snapshot: HistorySnapshot): string {
   const parts = [
-    `${snapshot.workouts.length} rides, ${snapshot.source} of ${timestamp(snapshot.fetchedAt)}Z`,
+    `${snapshot.workouts.length} rides, ${snapshot.source} of ${timestamp(snapshot.fetchedAt)}`,
   ];
   if (snapshot.skipped > 0) parts.push(`${snapshot.skipped} unreadable record(s)`);
   if (snapshot.truncated) parts.push("WARNING: the API's paging says there is more history than arrived");
@@ -153,7 +166,7 @@ export const TOOLS: ToolDefinition[] = [
       const snapshot = await store.snapshotNow();
       const s = rideSummary(findOrThrow(snapshot.workouts, args.id));
       const rows: [string, string][] = [
-        ["date", `${timestamp(s.startedAt)}Z`],
+        ["date", timestamp(s.startedAt)],
         ["mode", `${s.mode} (${s.machineType})`],
         ["control", describeControl(s.mode, s.control)],
         ["duration", hms(s.durationSeconds)],
@@ -230,10 +243,15 @@ export const TOOLS: ToolDefinition[] = [
     schema: {
       ...rideFilter,
       bucket: z.enum(["week", "month"]).optional().describe("Default month."),
+      // A multiple of the sample interval, as `resolutionSeconds` is: a 15 s window
+      // was averaged over one 10 s sample and labelled 0:15, and a 5 s one vanished.
       windowsSeconds: z
-        .array(z.number().int().positive())
+        .array(z.number().int().positive().multipleOf(SAMPLE_INTERVAL_SECONDS))
         .optional()
-        .describe(`Power-curve durations. Default ${DEFAULT_WINDOWS_SECONDS.join(", ")}.`),
+        .describe(
+          `Power-curve durations in seconds, multiples of ${SAMPLE_INTERVAL_SECONDS}. ` +
+            `Default ${DEFAULT_WINDOWS_SECONDS.join(", ")}.`,
+        ),
     },
     handler: async (store, args) => {
       const snapshot = await store.snapshotNow();
@@ -327,7 +345,7 @@ export const TOOLS: ToolDefinition[] = [
     handler: async (store) => {
       const snapshot = await store.refresh();
       const lines = [
-        `Downloaded ${snapshot.workouts.length} ride(s) at ${timestamp(snapshot.fetchedAt)}Z.`,
+        `Downloaded ${snapshot.workouts.length} ride(s) at ${timestamp(snapshot.fetchedAt)}.`,
       ];
       if (snapshot.skipped > 0) {
         lines.push(`${snapshot.skipped} record(s) could not be parsed and are not included.`);

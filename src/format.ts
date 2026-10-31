@@ -35,4 +35,5 @@ export const hms = (seconds: number): string => {
 
 export const day = (date: Date): string => date.toISOString().slice(0, 10);
 
-export const timestamp = (date: Date): string => date.toISOString().slice(0, 16).replace("T", " ");
+/** UTC to the minute, with the Z that every caller used to append. */
+export const timestamp = (date: Date): string => `${date.toISOString().slice(0, 16).replace("T", " ")}Z`;
