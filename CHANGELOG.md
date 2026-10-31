@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The version history source of truth is git tags in the format `vMAJOR.MINOR.PATCH`.
 
+## [Unreleased]
+
+### Changed
+
+- `matrix-workouts-core` moves to `^0.6.0`, which names console program 8 `hills`.
+  A Hills ride lists as mode `hills` where it read `unknown`. Nothing else here
+  branches on the mode, so no tool changes.
+
 ## [0.2.0] - 2026-10-31
 
 ### Fixed
