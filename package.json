@@ -1,6 +1,6 @@
 {
   "name": "matrix-workouts-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An MCP server for Matrix / Johnson Fitness workout history — power, cadence, resistance and heart rate the dashboard never shows.",
   "license": "MIT",
   "author": "Christoph Halang",
