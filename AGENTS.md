@@ -92,11 +92,12 @@ keys, and buys a model nothing a header line does not.
 - **`truncated` and `skipped` are surfaced, never swallowed.** They exist in the core
   precisely so a partial history cannot pass for a complete one.
 
-**Cross-ride analysis lives here, in `src/analysis/`, not in the core package.** The
-power curve and the bucketing are the first cross-ride views this project has ever
-had. If the extension ever wants to draw a power curve, promote that code to core
-*then* — putting it there now would be a published library carrying code with no
-second consumer.
+**The power curve is core's; the bucketing is still here.** The power curve started
+in `src/analysis/` as this project's first cross-ride view and moved to core (0.7.0)
+when the extension's records became its second consumer — the rule this paragraph
+used to state, applied. `summarize_history` formats core's `powerCurve` and computes
+nothing of its own. Bucketing and the ride summary stay in `src/analysis/` until
+something other than this server needs them.
 
 ---
 

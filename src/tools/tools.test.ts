@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { powerCurve } from "matrix-workouts-core";
 import { z } from "zod";
 
 import { fixtureWorkout, fixtureWorkouts, storeWith } from "../testSupport.js";
@@ -194,9 +195,23 @@ describe("summarize_history", () => {
   });
 
   /*
-   * `bestWindow` rounds a window down to whole samples, so 15 s was computed over one
-   * 10 s sample and printed under a 0:15 label, and 5 s rounded to nothing and left the
-   * curve without a row or a word about it.
+   * The curve is core's `powerCurve`, which leaves out each ride's partial final sample
+   * (this server's own copy counted it as a full 10 s). The tool only formats it, so
+   * the check here is that the rows are core's numbers, not a second implementation.
+   */
+  it("reports core's power curve over the matched rides", async () => {
+    const text = await run("summarize_history", { windowsSeconds: [10, 60, 300] });
+    for (const point of powerCurve(fixtureWorkouts(), [10, 60, 300])) {
+      expect(text).toContain(point.workoutId);
+      expect(text).toMatch(new RegExp(`\\s${Math.round(point.watts)}\\s`));
+    }
+  });
+
+  /*
+   * Core throws on a window that is not a whole number of samples; the schema refuses
+   * it first, so the caller gets the reason as an argument error. The old local copy
+   * rounded instead: 15 s was one 10 s sample printed under a 0:15 label, and 5 s
+   * rounded to nothing and left the curve without a row or a word about it.
    */
   it("refuses a power-curve window that is not a multiple of the sample interval", async () => {
     await expect(run("summarize_history", { windowsSeconds: [15] })).rejects.toThrow(/multiple of 10/);

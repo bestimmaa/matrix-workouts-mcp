@@ -6,11 +6,10 @@
  * and `docs.test.ts` asserts the README's table matches — so adding a tool is one
  * edit here and one row there, and forgetting the row fails the build.
  */
-import { SAMPLE_INTERVAL_SECONDS } from "matrix-workouts-core";
+import { DEFAULT_WINDOWS_SECONDS, SAMPLE_INTERVAL_SECONDS, powerCurve } from "matrix-workouts-core";
 import { z } from "zod";
 
 import { type HistoryFilter, bucketHistory, filterWorkouts } from "../analysis/history.js";
-import { DEFAULT_WINDOWS_SECONDS, powerCurve } from "../analysis/powerCurve.js";
 import { type Declined, type RideSummary, rideSummary } from "../analysis/summary.js";
 import { csv, day, hms, km, num, table, timestamp } from "../format.js";
 import type { HistorySnapshot, HistoryStore } from "../history/store.js";
