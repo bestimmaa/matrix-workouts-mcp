@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { bucketHistory, filterWorkouts } from "./history.js";
-import { powerCurve } from "./powerCurve.js";
 import { rideSummary, workKilojoules } from "./summary.js";
 import { fixtureWorkout, fixtureWorkouts } from "../testSupport.js";
 
@@ -45,25 +44,6 @@ describe("ride summary", () => {
     ] as never;
     // Two 10 s gaps at 100 W = 2 kJ. The last sample closes the ride and adds nothing.
     expect(workKilojoules(samples)).toBeCloseTo(2);
-  });
-});
-
-describe("power curve", () => {
-  it("finds the best sustained effort and says which ride it came from", () => {
-    const curve = powerCurve(fixtureWorkouts(), [10, 60, 300]);
-    expect(curve).toHaveLength(3);
-    expect(curve[0]?.watts).toBeGreaterThan(0);
-    expect(curve[0]?.workoutId).toBeTruthy();
-  });
-
-  it("falls as the window widens — a 10 s best cannot be below a 5 min best", () => {
-    const curve = powerCurve(fixtureWorkouts(), [10, 60, 300, 600]);
-    const watts = curve.map((point) => point.watts);
-    expect([...watts].sort((a, b) => b - a)).toEqual(watts);
-  });
-
-  it("omits a window longer than any ride rather than inventing a number", () => {
-    expect(powerCurve(fixtureWorkouts(), [86_400])).toEqual([]);
   });
 });
 

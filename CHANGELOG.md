@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The version history source of truth is git tags in the format `vMAJOR.MINOR.PATCH`.
 
+## [Unreleased]
+
+### Changed
+
+- `summarize_history`'s power curve is now `matrix-workouts-core`'s `powerCurve`
+  (core moves to `^0.7.0`); this server's own copy is gone. Core's version leaves out
+  each ride's partial final sample, which the copy here counted as a full 10 s of
+  power. On most windows the numbers do not move; on a window about as long as a ride
+  they can: a 20:00 Sprint 8 can now fall one sample short of a 20 min window and
+  drop out of that row, where it used to report a mean that included the partial.
+- A tie between rides on the displayed watts now goes to the earlier ride.
+
 ## [0.2.1] - 2026-10-31
 
 ### Changed
